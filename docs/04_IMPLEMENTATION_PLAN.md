@@ -14,9 +14,10 @@
 
 一期应实现：
 
-- 每日自动读取销量、库存、在途、预测等数据
+- 按三阶段交付：**规则跑通** → **解释与日报** → **反馈闭环**（预测建议属二期）
+- 每日自动读取销量、库存、在途等数据（预测接口一期可选预留）
 - 复刻现有 Excel 监控逻辑
-- 输出断货、滞销、销量异常、预测偏差、数据异常
+- 输出断货、滞销、销量异常、数据异常（预测偏差规则默认关闭，预测接入后启用）
 - 输出风险等级和触发指标
 - 对高风险 SKU 做异常解释
 - 输出建议动作和人工确认项
@@ -39,12 +40,12 @@
 
 | 任务 | 优先级 | 交付物 |
 |---|---|---|
-| 确定 SKU 主键和 GSKU / Basic SKU 转换关系 | P0 | 主键映射表 |
+| 确定 MSKU → Basic SKU 主键映射 | P0 | 主键映射表 |
 | 接入 SKU 基础资料 | P0 | dim_sku |
 | 接入库存数据 | P0 | fact_inventory_daily |
 | 接入在途数据 | P0 | inbound 明细或聚合表 |
 | 接入销售数据 | P0 | fact_sales_daily |
-| 接入历史预测 | P0 | fact_forecast_version |
+| 接入历史预测（接口预留，一期非必接） | P1 | fact_forecast_version |
 | 接入运营计划模板 | P1 | ops_plan 表或上传模板 |
 | 接入价格 / 广告字段 | P2 | 后续解释增强字段 |
 
@@ -71,7 +72,7 @@
 | 复刻断货风险规则 | P0 | stockout rules |
 | 复刻滞销风险规则 | P0 | slow-moving rules |
 | 复刻销量异常规则 | P0 | sales anomaly rules |
-| 复刻预测偏差规则 | P0 | forecast bias rules |
+| 预测偏差规则（`FORECAST_BIAS_ENABLED` 默认 false） | P1 | forecast bias rules |
 | 参数配置化 | P0 | rule_config 表 |
 | 与 Excel 一致率验证 | P0 | comparison report |
 
@@ -111,7 +112,7 @@
 |---|---:|---|---|
 | M1：口径冻结 | 3~5 天 | 字段、规则、输出、验收标准确认 | 评审通过 |
 | M2：规则跑通 | 1~2 周 | 监控底表 + 规则引擎 | Excel 一致率 ≥95% |
-| M3：日报可用 | 1~2 周 | 日报、清单、单 SKU 卡 | 业务认为可用 |
+| M3：解释与日报 | 1~2 周 | 异常解释、日报、清单、单 SKU 卡 | 业务认为可用 |
 | M4：反馈闭环 | 1 周+持续 | 人工反馈留痕 | 反馈机制跑通 |
 | M5：试运行复盘 | 2~4 周 | 稳定运行并复盘 | 决定是否扩大范围 |
 
@@ -185,3 +186,79 @@
 - 异常销量修正规则清晰
 - 数据质量问题可控
 - 业务已经接受 Agent 作为建议层
+
+---
+
+## 9. 开发启动清单
+
+一期 Grill 已收口（2026-06-22）。按下列顺序开工。
+
+### 9.1 文档入口
+
+见 [`00_DOCUMENT_MAP.md`](00_DOCUMENT_MAP.md)「开发阅读顺序」。决议冲突时以 [`CONTEXT.md`](../CONTEXT.md) 为准。
+
+### 9.2 M1 业务输入（开工前向业务索取）
+
+| 输入项 | 用途 | 负责人 |
+|---|---|---|
+| 重点 SKU 清单 | 一期试运行范围 | 计划 |
+| 重点仓库清单 | WAREHOUSE 作用域范围 | 计划 / 仓储 |
+| 重点类目（可选） | 分批上线 | 计划 |
+| 现有 Excel 监控样例 | 一致率 ≥95% 对照基准 | 计划 |
+| MSKU → Basic SKU 映射异常样例 | 映射表校验 | 计划 / 数据 |
+
+### 9.3 实现顺序（推荐）
+
+```text
+Week 1–2  数据接入 + 字段契约 + dim_sku / 映射表
+          → fact_sales_daily（MSKU→Basic SKU）
+          → fact_inventory_daily（产品库存 SKU×仓）
+          → inbound 明细（TMS）
+Week 2–3  规则引擎：DOS、断货、滞销、销量异常、在途缓释
+          → 与 Excel 一致率比对
+Week 3–4  异常事件池 + 解释 Agent + 日报/清单
+Week 4+   人工反馈 + 试运行复盘
+```
+
+### 9.4 一期默认配置
+
+实现时写入规则配置表或环境配置，与 CONTEXT 保持一致：
+
+| 配置项 | 一期值 |
+|---|---|
+| `BASE_SALES_PRIORITY` | ERP 7天日均 |
+| `SALES_SPIKE_TRIM` | `false` |
+| `FORECAST_BIAS_ENABLED` | `false` |
+| `INBOUND_RELIEF_DOWNGRADE` | `true` |
+| `INBOUND_TMS_ELIGIBLE` | 已出运, 入库中 |
+| `TIMEZONE` | `Asia/Shanghai` |
+| 风险清单默认作用域 | `WAREHOUSE` |
+
+### 9.5 P0 表结构（先建）
+
+| 表 | 主键 |
+|---|---|
+| `dim_sku` | `sku` |
+| `dim_msku_mapping` | `msku` + `channel`（或店铺） |
+| `fact_sales_daily` | `date` + `msku` + `channel`；rollup 视图至 `sku` |
+| `fact_inventory_daily` | `date` + `sku` + `warehouse` |
+| `fact_inbound_batch` | `date` + `sku` + `warehouse` + `batch_id` |
+| `fact_monitor_result` | `date` + `sku` + `warehouse` + `risk_type` |
+| `rule_config` | `rule_code` + `version` |
+
+`fact_forecast_version` 可空表预留；一期无数据不阻断。
+
+### 9.6 验收门禁
+
+| 阶段 | 通过标准 |
+|---|---|
+| M1 | 字段契约评审通过；业务清单到位 |
+| M2 | Excel 规则一致率 ≥95% |
+| M3 | 日报/清单业务认为可用；解释有证据 |
+| M4 | 反馈机制跑通 |
+| M5 | 定时任务成功率 ≥99%；试运行复盘 |
+
+### 9.7 凭证与安全
+
+- ERP 只读账号、RPA 凭证：**仅环境变量 / Secret**，不进仓库
+- 对齐包 `只读账户` sheet：对接规格参考，账号不入库

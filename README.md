@@ -60,10 +60,10 @@ ERP / WMS / 销售系统 / 预测表 / 运营计划 / RPA 抓取结果
 
 | 能力层 | 说明 | 当前阶段重点 |
 |---|---|---|
-| Monitor 监控 | 接入销量、库存、在途、预测、计划等数据，形成每日监控底表 | 一期 P0 |
-| Alert 预警 | 基于规则识别断货、滞销、销量异常、预测偏差、数据异常 | 一期 P0 |
-| Explain 解释 | 对异常 SKU 输出主解释、次解释、关键证据和冲突处理原则 | 一期 P1 |
-| Advise 建议 | 给出建议动作、责任角色、时效要求和人工确认项 | 一期 P1 |
+| Monitor 监控 | 接入销量、库存、在途等数据，形成每日监控底表（预测一期可选） | 一期 P0 |
+| Alert 预警 | 基于规则识别断货、滞销、销量异常、数据异常（预测偏差一期默认关闭） | 一期 P0 |
+| Explain 解释 | 对异常 SKU 输出主解释、次解释、关键证据和冲突处理原则 | 一期阶段 2 必交付 |
+| Advise 建议 | 给出建议动作、责任角色、时效要求和人工确认项 | 一期阶段 2 必交付 |
 | Workflow 闭环 | 记录人工采纳、驳回、修正原因和最终动作 | 一期 P1 / 二期基础 |
 | Learn 学习 | 基于反馈样本辅助预测修正与规则优化，但不自动拍板 | 二期及以后 |
 
@@ -125,7 +125,7 @@ flowchart TD
 | 断货风险 | 判断库存是否无法覆盖未来销售与交期 | DOS 低、销量突升、在途延期、重点链接库存消耗过快 |
 | 滞销风险 | 判断库存是否过高或动销变弱 | DOS 高、近 30/60/90 天销量低、库龄拉长、季节尾声 |
 | 销量异常 | 判断近期销量是否偏离正常节奏 | 近 3 天 / 近 15 天 / 近 30 天销量比率异常 |
-| 预测偏差 | 判断预测是否未同步实际变化 | 实际销量与预测差距扩大、运营计划未进入预测 |
+| 预测偏差 | 判断预测是否未同步实际变化（一期默认关闭，预测接入后启用） | 实际销量与预测差距扩大、运营计划未进入预测 |
 | 数据异常 | 判断是否存在字段缺失或口径冲突 | 负库存、ETA 缺失、重复 SKU、字段过期、映射错误 |
 
 详细规则与输出标准见：[docs/05_RULES_AND_OUTPUTS.md](docs/05_RULES_AND_OUTPUTS.md)
@@ -134,18 +134,30 @@ flowchart TD
 
 ## 文档结构
 
-本项目采用“主 README + 嵌套专题文档”的结构，避免 README 被一期细节淹没。
+本项目采用「CONTEXT + README + 嵌套专题文档」结构：领域决议在根目录，产品与实现细节在 `docs/`。
 
 | 文档 | 用途 |
 |---|---|
+| [**CONTEXT.md**](CONTEXT.md) | **领域术语、关系、一期决议、默认配置（开发优先读）** |
 | [README.md](README.md) | 项目总览、定位、能力、边界、文档入口 |
-| [docs/00_DOCUMENT_MAP.md](docs/00_DOCUMENT_MAP.md) | 文档地图，以及与业务对齐包各 sheet 的对应关系 |
+| [docs/00_DOCUMENT_MAP.md](docs/00_DOCUMENT_MAP.md) | 文档地图、SSOT、开发阅读顺序 |
 | [docs/01_PROJECT_CHARTER.md](docs/01_PROJECT_CHARTER.md) | 项目章程：目标、角色、边界、收益、成功标准 |
 | [docs/02_ROADMAP.md](docs/02_ROADMAP.md) | 产品级路线图：从一期规则复制到二期预测建议，再到长期 Agent 化 |
 | [docs/03_ARCHITECTURE.md](docs/03_ARCHITECTURE.md) | 系统架构、核心模块、数据链路、表结构建议 |
-| [docs/04_IMPLEMENTATION_PLAN.md](docs/04_IMPLEMENTATION_PLAN.md) | 一期落地计划、工作流、里程碑、验收方式 |
+| [docs/04_IMPLEMENTATION_PLAN.md](docs/04_IMPLEMENTATION_PLAN.md) | 一期落地计划、工作流、里程碑、**开发启动清单** |
 | [docs/05_RULES_AND_OUTPUTS.md](docs/05_RULES_AND_OUTPUTS.md) | 风险规则、解释规则、输出模板、反馈模板 |
 | [docs/06_GOVERNANCE.md](docs/06_GOVERNANCE.md) | 字段、规则、权限、安全、变更、人工确认机制 |
+| [docs/adr/](docs/adr/) | 难逆转架构决策记录 |
+
+---
+
+## 开发入口
+
+一期 Grill 已收口，可直接按 [`docs/04_IMPLEMENTATION_PLAN.md` §9](docs/04_IMPLEMENTATION_PLAN.md) 开工：
+
+1. 读 [`CONTEXT.md`](CONTEXT.md) 对齐术语与默认配置  
+2. M1 向业务索取重点 SKU / 仓清单与 Excel 对照样例  
+3. 按 P0 数据接入 → 规则引擎 → 解释日报 → 反馈 顺序实现  
 
 ---
 

@@ -34,7 +34,7 @@
 
 以下字段必须优先治理：
 
-- SKU / GSKU / Basic SKU 映射
+- MSKU / Basic SKU 映射
 - 当前可售库存
 - 锁定库存
 - 在途库存

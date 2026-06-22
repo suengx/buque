@@ -45,12 +45,24 @@ flowchart TD
 | SKU 基础资料 | SKU | P0 | 等级、季节属性、类目、重点链接标记 |
 | 库存数据 | SKU + 仓库 | P0 | 可售、锁定、不可售、仓库分布 |
 | 在途数据 | SKU + 批次 + ETA | P0 | 预计到货日期、状态、延期标记 |
-| 销售数据 | SKU + 日期 + 仓库/渠道 | P0 | 建议保留近 90~180 天历史 |
-| 历史预测 | SKU + 日期 + 预测版本 | P0 | 基础预测、人工确认预测 |
+| 销售数据 | SKU + 日期 + 仓库/渠道 | P0 | 订单 MSKU 粒度抓取后映射；见下方 ERP 来源 |
+| 产品库存（仓级） | SKU + 仓库 | P0 | ERP 产品库存页：可售、7天日均、周转；WAREHOUSE 主数据源 |
+| 历史预测 | SKU + 日期 + 预测版本 | P1（一期可选） | 表结构预留；`FORECAST_BIAS_ENABLED=false` 时不参与 DOS 与风险判断 |
 | 运营销售计划 | SKU + 日期/活动 ID | P1 | 若没有系统，可先标准模板导入 |
 | 采购交期 | SKU + PO | P0 | 下单日、交期、延期标记 |
 | 价格促销 | SKU + 日期 | P2 | 用于提高解释准确率 |
 | 广告投放 | SKU/ASIN + 日期 | P2 | 用于区分自然波动与运营放量 |
+
+### 一期 ERP / RPA 来源（P0）
+
+| 数据 | ERP 入口 | 粒度 | 写入目标 |
+|---|---|---|---|
+| 订购销量 | 全渠道订单 `/sales/multiChannel/orders` | MSKU + 订购时间(市场) | `fact_sales_daily`（再映射 Basic SKU） |
+| 仓级库存与日销 | 产品库存 `/gip/inventoryManage/product` | SKU × 仓库 | `fact_inventory_daily`、WAREHOUSE `ref_daily_sales` |
+| 在途批次 | TMS 发货单（对齐包 RPA 规格） | SKU + 目的仓 + ETA + 状态 + 未收量 | inbound 明细表 |
+| 仓内在途量（无 ETA） | 库存管理在途量字段 | SKU + 仓库 | 仅展示/校验，不参与缓释 |
+
+时区与日期归因统一使用 **Asia/Shanghai**；市场日销量按「订购时间(市场)」归因。
 
 ---
 
@@ -66,7 +78,7 @@ flowchart TD
 
 | 分类 | 字段示例 | 作用 |
 |---|---|---|
-| 基础信息 | sku、product_name、item_grade、seasonality、is_key_listing | 决定主键、阈值和优先级 |
+| 基础信息 | sku、msku、product_name、item_grade、seasonality、is_key_listing | 决定主键、映射、阈值和优先级 |
 | 仓储库存 | warehouse、available_inventory、reserved_inventory、on_hand_inventory | 计算真实可售与仓库分布 |
 | 在途采购 | in_transit_inventory、eta_date、lead_time_days | 判断在途是否来得及 |
 | 销售表现 | sales_d1、sales_3d、sales_7d、sales_30d、avg_sales_7d | 判断销量波动与趋势 |
@@ -82,10 +94,15 @@ flowchart TD
 - 库存为负
 - 可售库存大于总库存
 - 销量字段过期
-- ETA 缺失或不可信
 - 仓库映射错误
-- 预测版本缺失
-- 核心字段为空
+- DOS 计算所需的库存或销量核心字段为空
+
+以下情况**不阻断** DOS 与断货/滞销判断：
+
+- 预测版本缺失（一期默认 `FORECAST_BIAS_ENABLED=false`）
+- 无 ETA 的仓库在途量（仅展示/校验，不参与缓释）
+
+在途参与缓释时，ETA 须可信，且 TMS 状态为**已出运**或**入库中**；**提货中**仅展示。缓释成立时允许红灯降橙灯，须输出「需关注到货兑现」。
 
 ---
 
