@@ -115,3 +115,29 @@ class PipelineRunResult(BaseModel):
     monitor_results: int
     events: int
     explained: int
+
+
+class ErpSyncRequest(BaseModel):
+    monitor_date: date | None = None
+    run_pipeline: bool = False
+
+
+class ErpSyncAccepted(BaseModel):
+    monitor_date: date
+    message: str = "ERP 同步已启动"
+
+
+class IngestionSourceStatus(BaseModel):
+    source: str
+    status: str
+    row_count: int
+    file_path: str | None = None
+    error: str | None = None
+    finished_at: datetime | None = None
+    ingestion_run_id: int | None = None
+
+
+class ErpSyncStatusResponse(BaseModel):
+    monitor_date: date
+    running: bool
+    sources: list[IngestionSourceStatus]

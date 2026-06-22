@@ -1,4 +1,4 @@
-.PHONY: db-up db-down backend-install frontend-install init-db api pipeline frontend test dev stop
+.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop
 
 db-up:
 	docker compose up -d
@@ -25,6 +25,9 @@ api:
 
 pipeline:
 	cd backend && uv run buque-job
+
+pipeline-erp:
+	cd backend && BUQUE_USE_ERP=1 uv run buque-job
 
 frontend:
 	cd frontend && npm run dev

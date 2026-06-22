@@ -1,52 +1,82 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
 from sqlalchemy.orm import Session
 
-from buque.config import get_settings
+from buque.ingestion.gerpgo_session import GerpgGoSession
 from buque.ingestion.parsers import InboundParser, InventoryParser, OrdersParser
 from buque.services.rule_config import RuleConfigService
 
-settings = get_settings()
+ERP_SOURCES = ("erp_inventory", "erp_orders", "tms_inbound")
 
 
-class ErpExporter:
-    """ERP 页面导出：登录 → 导航 → 触发导出 → 落盘。"""
+@dataclass
+class SourceSyncResult:
+    source: str
+    status: str
+    row_count: int = 0
+    file_path: str | None = None
+    error: str | None = None
+    ingestion_run_id: int | None = None
 
-    ORDERS_PATH = "/sales/multiChannel/orders"
-    INVENTORY_PATH = "/gip/inventoryManage/product"
 
-    def __init__(self, export_dir: Path | None = None):
-        self.export_dir = export_dir or Path(settings.export_dir)
-        self.export_dir.mkdir(parents=True, exist_ok=True)
+@dataclass
+class ErpSyncResult:
+    monitor_date: date
+    sources: list[SourceSyncResult] = field(default_factory=list)
 
-    def _login(self, page) -> None:
-        if not settings.erp_base_url or not settings.erp_username:
-            raise RuntimeError("ERP_BASE_URL / ERP_USERNAME 未配置")
-        page.goto(f"{settings.erp_base_url.rstrip('/')}/login")
-        page.fill('input[name="username"], input[type="text"]', settings.erp_username)
-        page.fill('input[name="password"], input[type="password"]', settings.erp_password)
-        page.click('button[type="submit"], .login-btn')
-        page.wait_for_load_state("networkidle")
+    @property
+    def ingestion_counts(self) -> dict[str, int]:
+        return {
+            s.source.replace("erp_", "").replace("tms_", ""): s.row_count
+            for s in self.sources
+            if s.status == "SUCCESS"
+        }
 
-    def export_page(self, path_suffix: str, export_button_selector: str, filename: str) -> Path:
-        target = self.export_dir / filename
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(accept_downloads=True)
-            page = context.new_page()
-            self._login(page)
-            page.goto(f"{settings.erp_base_url.rstrip('/')}{path_suffix}")
-            page.wait_for_load_state("networkidle")
-            with page.expect_download() as download_info:
-                page.click(export_button_selector)
-            download = download_info.value
-            download.save_as(str(target))
-            browser.close()
-        return target
+
+def _ingest_safe(
+    db: Session,
+    source: str,
+    ingest_fn,
+) -> SourceSyncResult:
+    from buque.models.entities import IngestionRun, IngestionStatus
+
+    db.rollback()
+    try:
+        row_count = ingest_fn()
+        run = (
+            db.query(IngestionRun)
+            .filter(IngestionRun.source == source)
+            .order_by(IngestionRun.id.desc())
+            .first()
+        )
+        return SourceSyncResult(
+            source=source,
+            status="SUCCESS",
+            row_count=row_count,
+            file_path=run.file_path if run else None,
+            ingestion_run_id=run.id if run else None,
+        )
+    except Exception as exc:
+        db.rollback()
+        run = (
+            db.query(IngestionRun)
+            .filter(IngestionRun.source == source)
+            .order_by(IngestionRun.id.desc())
+            .first()
+        )
+        status = run.status.value if run and run.status else IngestionStatus.FAILED.value
+        return SourceSyncResult(
+            source=source,
+            status=status,
+            row_count=0,
+            file_path=run.file_path if run else None,
+            error=str(exc),
+            ingestion_run_id=run.id if run else None,
+        )
 
 
 def run_ingestion_from_files(
@@ -55,35 +85,47 @@ def run_ingestion_from_files(
     inventory_file: Path | None = None,
     orders_file: Path | None = None,
     inbound_file: Path | None = None,
-) -> dict[str, int]:
+) -> ErpSyncResult:
     rule_config = RuleConfigService(db)
-    results: dict[str, int] = {}
+    result = ErpSyncResult(monitor_date=monitor_date)
 
     if inventory_file and inventory_file.exists():
-        results["inventory"] = InventoryParser(db, monitor_date).ingest_file(inventory_file)
+        result.sources.append(
+            _ingest_safe(
+                db,
+                "erp_inventory",
+                lambda: InventoryParser(db, monitor_date).ingest_file(inventory_file),
+            )
+        )
     if orders_file and orders_file.exists():
-        results["orders"] = OrdersParser(db, monitor_date).ingest_file(orders_file)
+        result.sources.append(
+            _ingest_safe(
+                db,
+                "erp_orders",
+                lambda: OrdersParser(db, monitor_date).ingest_file(orders_file),
+            )
+        )
     if inbound_file and inbound_file.exists():
-        results["inbound"] = InboundParser(db, monitor_date, rule_config).ingest_file(inbound_file)
+        result.sources.append(
+            _ingest_safe(
+                db,
+                "tms_inbound",
+                lambda: InboundParser(db, monitor_date, rule_config).ingest_file(inbound_file),
+            )
+        )
+    return result
 
-    return results
 
+def run_ingestion_from_erp(db: Session, monitor_date: date) -> ErpSyncResult:
+    with GerpgGoSession() as session:
+        inventory_path = session.export_inventory_merged(monitor_date)
+        orders_path = session.export_orders(monitor_date)
+        inbound_path = session.export_tms_inbound(monitor_date)
 
-def run_ingestion_from_erp(db: Session, monitor_date: date) -> dict[str, int]:
-    exporter = ErpExporter()
-    inventory_path = exporter.export_page(
-        ErpExporter.INVENTORY_PATH,
-        'button:has-text("导出"), .export-btn',
-        f"inventory_{monitor_date.isoformat()}.xlsx",
-    )
-    orders_path = exporter.export_page(
-        ErpExporter.ORDERS_PATH,
-        'button:has-text("导出"), .export-btn',
-        f"orders_{monitor_date.isoformat()}.xlsx",
-    )
     return run_ingestion_from_files(
         db,
         monitor_date,
         inventory_file=inventory_path,
         orders_file=orders_path,
+        inbound_file=inbound_path,
     )

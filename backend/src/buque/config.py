@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     erp_base_url: str = ""
     erp_username: str = ""
     erp_password: str = ""
+    erp_web_prefix: str = "/amzv-web"
 
     llm_api_base: str = ""
     llm_api_key: str = ""
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
 
     data_dir: str = "data"
     export_dir: str = "data/exports"
+    erp_sync_timeout_ms: int = 600_000
 
     @property
     def tz(self) -> ZoneInfo:

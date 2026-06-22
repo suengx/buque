@@ -49,9 +49,15 @@ def _finish_run(db: Session, run: IngestionRun, row_count: int, error: str | Non
 
 
 def _ensure_sku(db: Session, sku: str, product_name: str | None = None) -> None:
-    if db.get(DimSku, sku):
+    if product_name:
+        product_name = product_name[:255]
+    existing = db.get(DimSku, sku)
+    if existing:
+        if product_name and not existing.product_name:
+            existing.product_name = product_name
         return
     db.add(DimSku(sku=sku, product_name=product_name))
+    db.flush()
 
 
 def _resolve_sku(db: Session, msku: str, channel: str) -> str | None:
@@ -63,6 +69,30 @@ def _resolve_sku(db: Session, msku: str, channel: str) -> str | None:
     return mapping.sku if mapping else None
 
 
+def _split_product_sku(value: str) -> tuple[str | None, str]:
+    """积加常见「产品名称\\nSKU」合并单元格拆分。"""
+    text = str(value).strip()
+    if not text or text == "nan":
+        return None, ""
+    if "\n" in text:
+        parts = [p.strip() for p in text.split("\n") if p.strip()]
+        if len(parts) >= 2:
+            return parts[0], parts[-1]
+    return None, text
+
+
+def _normalize_inventory_row(row: pd.Series) -> tuple[str, str | None]:
+    product_name = str(row.get("product_name", "")).strip() or None
+    sku_raw = str(row.get("sku", "")).strip()
+    if sku_raw and sku_raw != "nan" and "\n" in sku_raw:
+        pn, sku = _split_product_sku(sku_raw)
+        return sku, pn or product_name
+    if (not sku_raw or sku_raw == "nan") and product_name:
+        pn, sku = _split_product_sku(product_name)
+        return sku, pn
+    return sku_raw, product_name
+
+
 class InventoryParser:
     COLUMN_MAP = {
         "SKU": "sku",
@@ -71,6 +101,7 @@ class InventoryParser:
         "仓库": "warehouse",
         "warehouse": "warehouse",
         "可售库存": "available_inventory",
+        "可用量": "available_inventory",
         "available_inventory": "available_inventory",
         "锁定库存": "reserved_inventory",
         "reserved_inventory": "reserved_inventory",
@@ -109,10 +140,9 @@ class InventoryParser:
 
         count = 0
         for _, row in df.iterrows():
-            sku = str(row["sku"]).strip()
+            sku, product_name = _normalize_inventory_row(row)
             if not sku or sku == "nan":
                 continue
-            product_name = str(row.get("product_name", "")).strip() or None
             _ensure_sku(self.db, sku, product_name)
             warehouse = str(row["warehouse"]).strip()
 
@@ -151,10 +181,12 @@ class OrdersParser:
         "MSKU": "msku",
         "msku": "msku",
         "平台": "channel",
+        "销售渠道": "channel",
         "channel": "channel",
         "订购数量": "order_qty",
         "order_qty": "order_qty",
         "订购时间(市场)": "order_date",
+        "订购时间": "order_date",
         "order_date": "order_date",
         "仓库": "warehouse",
         "warehouse": "warehouse",
@@ -177,22 +209,29 @@ class OrdersParser:
     def _parse(self, path: Path) -> int:
         df = pd.read_excel(path) if path.suffix.lower() in {".xlsx", ".xls"} else pd.read_csv(path)
         df = df.rename(columns={c: self.COLUMN_MAP[c] for c in df.columns if c in self.COLUMN_MAP})
-        if "order_date" in df.columns:
-            df["order_date"] = pd.to_datetime(df["order_date"]).dt.date
-            df = df[df["order_date"] == self.monitor_date]
         if "msku" not in df.columns or "channel" not in df.columns:
             raise ValueError("订单文件缺少 msku/channel 列")
 
+        if "order_date" in df.columns:
+            df["order_date"] = pd.to_datetime(df["order_date"]).dt.date
+        else:
+            df["order_date"] = self.monitor_date
+
         count = 0
-        grouped = df.groupby(["msku", "channel"], dropna=False).agg({"order_qty": "sum"}).reset_index()
+        grouped = (
+            df.groupby(["order_date", "msku", "channel"], dropna=False)
+            .agg({"order_qty": "sum"})
+            .reset_index()
+        )
         for _, row in grouped.iterrows():
             msku = str(row["msku"]).strip()
             channel = str(row["channel"]).strip()
+            order_date = row["order_date"]
             sku = _resolve_sku(self.db, msku, channel)
             existing = (
                 self.db.query(FactSalesDaily)
                 .filter(
-                    FactSalesDaily.date == self.monitor_date,
+                    FactSalesDaily.date == order_date,
                     FactSalesDaily.msku == msku,
                     FactSalesDaily.channel == channel,
                 )
@@ -204,7 +243,7 @@ class OrdersParser:
             else:
                 self.db.add(
                     FactSalesDaily(
-                        date=self.monitor_date,
+                        date=order_date,
                         msku=msku,
                         channel=channel,
                         sku=sku,
@@ -249,6 +288,8 @@ class InboundParser:
 
     def _parse(self, path: Path) -> int:
         df = pd.read_excel(path) if path.suffix.lower() in {".xlsx", ".xls"} else pd.read_csv(path)
+        if df.empty:
+            return 0
         df = df.rename(columns={c: self.COLUMN_MAP[c] for c in df.columns if c in self.COLUMN_MAP})
         required = {"sku", "warehouse", "batch_id"}
         if not required.issubset(df.columns):

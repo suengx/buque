@@ -77,6 +77,36 @@ export type FeedbackStats = {
   adoption_rate: number
 }
 
+export type IngestionSourceStatus = {
+  source: string
+  status: string
+  row_count: number
+  file_path: string | null
+  error: string | null
+  finished_at: string | null
+  ingestion_run_id: number | null
+}
+
+export type ErpSyncStatusResponse = {
+  monitor_date: string
+  running: boolean
+  sources: IngestionSourceStatus[]
+}
+
+export type ErpSyncAccepted = {
+  monitor_date: string
+  message: string
+}
+
+export type PipelineRunResult = {
+  monitor_date: string
+  ingestion: Record<string, number>
+  quality_issues: number
+  monitor_results: number
+  events: number
+  explained: number
+}
+
 export const api = {
   dailyReport: (date?: string) =>
     request<DailyReportSummary>(`/reports/daily${date ? `?monitor_date=${date}` : ''}`),
@@ -92,6 +122,24 @@ export const api = {
   createFeedback: (body: Record<string, unknown>) =>
     request('/feedback', { method: 'POST', body: JSON.stringify(body) }),
   feedbackStats: () => request<FeedbackStats>('/feedback/stats'),
+  startErpSync: (opts: { monitorDate?: string; runPipeline: boolean }) =>
+    request<ErpSyncAccepted>('/admin/sync/erp', {
+      method: 'POST',
+      body: JSON.stringify({
+        monitor_date: opts.monitorDate,
+        run_pipeline: opts.runPipeline,
+      }),
+    }),
+  getErpSyncStatus: (monitorDate?: string) =>
+    request<ErpSyncStatusResponse>(
+      `/admin/sync/status${monitorDate ? `?monitor_date=${monitorDate}` : ''}`,
+    ),
+  runPipeline: (opts: { monitorDate?: string; ingestionSource?: 'fixtures' | 'erp' }) => {
+    const q = new URLSearchParams()
+    if (opts.monitorDate) q.set('monitor_date', opts.monitorDate)
+    if (opts.ingestionSource) q.set('ingestion_source', opts.ingestionSource)
+    return request<PipelineRunResult>(`/admin/pipeline/run?${q}`, { method: 'POST' })
+  },
 }
 
 export const queryKeys = {

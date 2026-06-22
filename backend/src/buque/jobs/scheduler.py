@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date
-from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -10,9 +10,7 @@ from sqlalchemy.orm import Session
 
 from buque.config import get_settings
 from buque.db import SessionLocal
-from buque.ingestion.erp_exporter import run_ingestion_from_erp, run_ingestion_from_files
-from buque.quality.checker import DataQualityChecker
-from buque.services.monitor_pipeline import run_event_pool_and_explain, run_rules
+from buque.services.sync_pipeline import run_full_pipeline
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -23,22 +21,12 @@ def run_daily_pipeline(monitor_date: date | None = None, use_fixtures: bool = Fa
     db: Session = SessionLocal()
     try:
         if use_fixtures:
-            fixture_dir = Path(__file__).resolve().parents[3] / "fixtures" / "sample_exports"
-            run_ingestion_from_files(
-                db,
-                md,
-                inventory_file=fixture_dir / "inventory.csv",
-                orders_file=fixture_dir / "orders.csv",
-                inbound_file=fixture_dir / "inbound.csv",
-            )
+            run_full_pipeline(db, md, ingestion="fixtures")
         elif settings.erp_base_url:
-            run_ingestion_from_erp(db, md)
+            run_full_pipeline(db, md, ingestion="erp")
         else:
             logger.warning("ERP 未配置，跳过抓取")
-
-        DataQualityChecker(db, md).run()
-        run_rules(db, md)
-        run_event_pool_and_explain(db, md)
+            return
         logger.info("日批完成: %s", md.isoformat())
     finally:
         db.close()
@@ -46,7 +34,8 @@ def run_daily_pipeline(monitor_date: date | None = None, use_fixtures: bool = Fa
 
 def run_daily_pipeline_cli() -> None:
     logging.basicConfig(level=logging.INFO)
-    run_daily_pipeline(use_fixtures=True)
+    use_erp = os.environ.get("BUQUE_USE_ERP", "").lower() in {"1", "true", "yes"}
+    run_daily_pipeline(use_fixtures=not use_erp)
 
 
 def start_scheduler() -> None:
