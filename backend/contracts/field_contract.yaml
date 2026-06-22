@@ -1,0 +1,83 @@
+# 补雀 BuQue 字段契约（M1 SSOT）
+
+version: "1.0"
+effective_date: "2026-06-22"
+timezone: Asia/Shanghai
+
+sources:
+  erp_orders:
+    path: /sales/multiChannel/orders
+    refresh: daily
+    grain: msku + channel + order_date_market
+    fields:
+      - name: msku
+        type: string
+        required: true
+      - name: channel
+        type: string
+        required: true
+      - name: order_qty
+        type: integer
+        required: true
+        note: 订购数量，与订单状态无关
+      - name: order_date
+        type: date
+        required: true
+        note: 订购时间(市场)，Asia/Shanghai 归因
+
+  erp_inventory:
+    path: /gip/inventoryManage/product
+    refresh: daily
+    grain: sku + warehouse
+    fields:
+      - name: sku
+        type: string
+        required: true
+      - name: warehouse
+        type: string
+        required: true
+      - name: available_inventory
+        type: integer
+        required: true
+        note: DOS 分子，不含在途
+      - name: ref_daily_sales
+        type: decimal
+        required: true
+        note: ERP 7天日均，一期原样使用
+      - name: in_transit_no_eta
+        type: integer
+        required: false
+        note: 无 ETA 仓内在途，仅展示
+
+  tms_inbound:
+    path: TMS发货单
+    refresh: daily
+    grain: sku + warehouse + batch_id
+    fields:
+      - name: eta_date
+        type: date
+        required: false
+      - name: tms_status
+        type: string
+        required: true
+        note: 已出运/入库中可缓释；提货中仅展示
+      - name: unreceived_qty
+        type: integer
+        required: true
+
+quality_rules:
+  - code: NEGATIVE_INVENTORY
+    block_dos: true
+  - code: MSKU_MAPPING_MISSING
+    block_dos: false
+  - code: MISSING_REF_SALES
+    block_dos: true
+  - code: MISSING_FORECAST
+    block_dos: false
+    note: FORECAST_BIAS_ENABLED=false 时不阻断
+
+business_inputs_required:
+  - focus_skus.csv
+  - focus_warehouses.csv
+  - msku_mapping.csv
+  - excel_baseline.xlsx

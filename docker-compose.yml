@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: buque
+      POSTGRES_PASSWORD: buque
+      POSTGRES_DB: buque
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - buque_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buque -d buque"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  buque_pg_data:

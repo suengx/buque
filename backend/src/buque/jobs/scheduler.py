@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import logging
+from datetime import date
+from pathlib import Path
+
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy.orm import Session
+
+from buque.config import get_settings
+from buque.db import SessionLocal
+from buque.ingestion.erp_exporter import run_ingestion_from_erp, run_ingestion_from_files
+from buque.quality.checker import DataQualityChecker
+from buque.services.monitor_pipeline import run_event_pool_and_explain, run_rules
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+def run_daily_pipeline(monitor_date: date | None = None, use_fixtures: bool = False) -> None:
+    md = monitor_date or date.today()
+    db: Session = SessionLocal()
+    try:
+        if use_fixtures:
+            fixture_dir = Path(__file__).resolve().parents[3] / "fixtures" / "sample_exports"
+            run_ingestion_from_files(
+                db,
+                md,
+                inventory_file=fixture_dir / "inventory.csv",
+                orders_file=fixture_dir / "orders.csv",
+                inbound_file=fixture_dir / "inbound.csv",
+            )
+        elif settings.erp_base_url:
+            run_ingestion_from_erp(db, md)
+        else:
+            logger.warning("ERP 未配置，跳过抓取")
+
+        DataQualityChecker(db, md).run()
+        run_rules(db, md)
+        run_event_pool_and_explain(db, md)
+        logger.info("日批完成: %s", md.isoformat())
+    finally:
+        db.close()
+
+
+def run_daily_pipeline_cli() -> None:
+    logging.basicConfig(level=logging.INFO)
+    run_daily_pipeline(use_fixtures=True)
+
+
+def start_scheduler() -> None:
+    logging.basicConfig(level=logging.INFO)
+    scheduler = BlockingScheduler(timezone=str(settings.tz))
+    scheduler.add_job(
+        run_daily_pipeline,
+        CronTrigger(hour=6, minute=0, timezone=settings.tz),
+        id="buque_daily_pipeline",
+        replace_existing=True,
+    )
+    logger.info("调度器已启动 Asia/Shanghai 06:00 日批")
+    scheduler.start()
+
+
+if __name__ == "__main__":
+    start_scheduler()

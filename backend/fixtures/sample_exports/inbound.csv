@@ -1,0 +1,4 @@
+sku,warehouse,batch_id,eta_date,tms_status,unreceived_qty
+C0150515,COSIEST:US_FBA,BATCH-001,2026-07-05,已出运,200
+GHI-200,COSIEST:US_FBA,BATCH-002,2026-06-28,入库中,50
+ABC-001,US-WEST,BATCH-003,,提货中,30

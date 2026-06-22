@@ -1,0 +1,6 @@
+msku,channel,order_qty,order_date
+MSKU-C0150515-AMZ,Amazon,12,2026-06-22
+MSKU-C0150515-WF,Wayfair,3,2026-06-22
+MSKU-ABC-001,Amazon,6,2026-06-22
+MSKU-DEF-105,Temu,1,2026-06-22
+MSKU-GHI-200,Amazon,20,2026-06-22

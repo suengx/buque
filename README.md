@@ -153,10 +153,33 @@ flowchart TD
 
 ## 开发入口
 
-一期 Grill 已收口，可直接按 [`docs/04_IMPLEMENTATION_PLAN.md` §9](docs/04_IMPLEMENTATION_PLAN.md) 开工：
+一期 Grill 已收口，可直接按 [`docs/04_IMPLEMENTATION_PLAN.md` §9](docs/04_IMPLEMENTATION_PLAN.md) 开工。
+
+### 本地启动
+
+```bash
+cp .env.example .env
+make init-db      # 首次
+make dev          # 一键：PostgreSQL + API + 前端
+```
+
+或分终端启动：
+
+```bash
+make db-up
+make init-db
+make api          # http://localhost:8000
+make frontend     # http://localhost:3000
+make pipeline     # 日批（fixture 样例数据）
+make test
+```
+
+Monorepo 结构：`backend/`（FastAPI + 规则引擎 + Playwright 抓取）、`frontend/`（TanStack Start + shadcn 风格 UI）。
+
+开发阅读顺序：
 
 1. 读 [`CONTEXT.md`](CONTEXT.md) 对齐术语与默认配置  
-2. M1 向业务索取重点 SKU / 仓清单与 Excel 对照样例  
+2. M1 向业务索取重点 SKU / 仓清单与 Excel 对照样例（见 `backend/fixtures/README.md`）  
 3. 按 P0 数据接入 → 规则引擎 → 解释日报 → 反馈 顺序实现  
 
 ---

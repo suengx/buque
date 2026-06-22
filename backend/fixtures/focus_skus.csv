@@ -1,0 +1,5 @@
+sku,product_name,item_grade,seasonality,category,is_key_listing,is_focus_sku
+C0150515,42in Fire Table,A,季节品,Fire Tables,true,true
+ABC-001,Sample SKU A,B,常规品,Tables,false,true
+DEF-105,Sample SKU B,C,常规品,Tables,false,true
+GHI-200,Sample SKU C,A,常规品,Tables,true,true

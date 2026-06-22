@@ -1,0 +1,35 @@
+.env
+.env.local
+__pycache__/
+*.py[cod]
+.venv/
+backend/.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.alembic/
+
+# Data & exports
+backend/data/exports/
+backend/data/raw/
+*.xlsx
+!docs/desensitized_raw_docs.xlsx
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.output/
+frontend/.vinxi/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Playwright
+playwright-report/
+test-results/

@@ -1,0 +1,6 @@
+sku,product_name,warehouse,available_inventory,reserved_inventory,on_hand_inventory,ref_daily_sales,turnover_days,in_transit_no_eta
+C0150515,42in Fire Table,COSIEST:US_FBA,120,10,130,4.0,30,0
+C0150515,42in Fire Table,W508,80,5,85,2.5,32,15
+ABC-001,Sample SKU A,US-WEST,45,0,45,3.0,15,0
+DEF-105,Sample SKU B,US-WEST,900,0,900,1.0,900,0
+GHI-200,Sample SKU C,COSIEST:US_FBA,25,0,25,8.0,3,0
