@@ -12,11 +12,22 @@ class SkuBrief(BaseModel):
     is_key_listing: bool = False
 
 
+class TrendComparison(BaseModel):
+    new_red_count: int
+    new_orange_count: int
+    baseline_label: str | None = None
+    baseline_snapshot_id: int | None = None
+    available: bool = True
+
+
 class DailyReportSummary(BaseModel):
+    snapshot_id: int
     monitor_date: date
     monitored_sku_count: int
     new_red_count: int
     new_orange_count: int
+    comparison_vs_prev_day: TrendComparison
+    comparison_vs_prev_snapshot: TrendComparison
     stockout_high_risk_count: int
     slow_moving_high_risk_count: int
     sales_anomaly_count: int
@@ -33,6 +44,7 @@ class TrendPoint(BaseModel):
 
 
 class AlertsMetaOut(BaseModel):
+    snapshot_id: int
     monitor_date: date
     warehouses: list[str]
     type_counts: dict[str, int]
@@ -64,6 +76,7 @@ class MonitorResultOut(BaseModel):
 
 
 class ReportAnalyticsOut(BaseModel):
+    snapshot_id: int
     monitor_date: date
     level_counts: dict[str, int]
     type_counts: dict[str, int]
@@ -72,6 +85,7 @@ class ReportAnalyticsOut(BaseModel):
 
 
 class SkuDetailOut(BaseModel):
+    snapshot_id: int
     monitor_date: date
     sku: str
     product_name: str | None
@@ -104,6 +118,7 @@ class AgentExplainOut(BaseModel):
 
 
 class FeedbackCreate(BaseModel):
+    snapshot_id: int | None = None
     date: date
     sku: str
     risk_type: str
@@ -144,6 +159,7 @@ class PaginatedAlerts(BaseModel):
 
 
 class PipelineRunResult(BaseModel):
+    snapshot_id: int
     monitor_date: date
     ingestion: dict[str, int]
     quality_issues: int
@@ -152,24 +168,14 @@ class PipelineRunResult(BaseModel):
     explained: int
 
 
-class ErpSyncRequest(BaseModel):
+class PipelineRequest(BaseModel):
     monitor_date: date | None = None
 
 
-class ErpSyncAccepted(BaseModel):
+class PipelineAccepted(BaseModel):
+    snapshot_id: int
     monitor_date: date
-    job_id: int
-    message: str = "ERP 同步已启动"
-
-
-class AnalysisRequest(BaseModel):
-    monitor_date: date | None = None
-
-
-class AnalysisAccepted(BaseModel):
-    monitor_date: date
-    job_id: int
-    message: str = "分析任务已启动"
+    message: str = "同步并分析已启动"
 
 
 class ErpSyncLogEntry(BaseModel):
@@ -188,52 +194,36 @@ class IngestionSourceStatus(BaseModel):
     ingestion_run_id: int | None = None
 
 
-class ErpSyncStatusResponse(BaseModel):
+class PipelineStatusResponse(BaseModel):
+    snapshot_id: int | None
     monitor_date: date
     running: bool
-    job_id: int | None = None
     job_status: str
     phase: str | None = None
     phase_message: str | None = None
     error: str | None = None
     finished_at: datetime | None = None
     sync_summary: dict | None = None
+    analysis_summary: dict | None = None
+    progress_current: int | None = None
+    progress_total: int | None = None
     logs: list[ErpSyncLogEntry] = []
     sources: list[IngestionSourceStatus]
 
 
-class AnalysisStatusResponse(BaseModel):
+class SnapshotSummary(BaseModel):
+    id: int
     monitor_date: date
-    running: bool
-    job_id: int | None = None
-    job_status: str
-    phase: str | None = None
-    phase_message: str | None = None
-    error: str | None = None
-    finished_at: datetime | None = None
-    progress_current: int | None = None
-    progress_total: int | None = None
-    analysis_summary: dict | None = None
-    logs: list[ErpSyncLogEntry] = []
-
-
-class ErpSyncLatestResponse(BaseModel):
-    monitor_date: date
-    has_sync: bool
-    job_id: int | None = None
-    finished_at: datetime | None = None
+    finished_at: datetime | None
     sync_summary: dict | None = None
+    analysis_summary: dict | None = None
 
 
 class OpsStatusResponse(BaseModel):
-    monitor_date: date
     timezone: str
     schedule_label: str
     next_scheduled_at: datetime
     pipeline_active: bool
-    sync_running: bool
-    analysis_running: bool
-    sync_phase_message: str | None = None
-    analysis_phase_message: str | None = None
+    running_snapshot_id: int | None = None
+    phase_message: str | None = None
     erp_configured: bool
-    latest_sync: ErpSyncLatestResponse

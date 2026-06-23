@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { BarChart3, CircleAlert, OctagonAlert, TriangleAlert } from 'lucide-react'
 import { api, queryKeys } from '#/lib/api'
 import { RISK_LEVEL_LABEL, riskTypeLabel } from '#/lib/labels'
-import { useMonitorDate } from '#/context/MonitorDateContext'
+import { useSnapshot } from '#/context/SnapshotContext'
 import { AlertsTable } from '#/components/buque/AlertsTable'
 import { CategoryDistribution } from '#/components/buque/CategoryDistribution'
 import { FilterBar, type FilterValues } from '#/components/buque/FilterBar'
@@ -45,7 +45,7 @@ function pct(count: number, total: number) {
 function AlertsPage() {
   const navigate = useNavigate({ from: '/alerts/' })
   const search = Route.useSearch()
-  const { monitorDate, setMonitorDate } = useMonitorDate()
+  const { selectedSnapshotId } = useSnapshot()
   const [draft, setDraft] = useState<FilterValues>({
     level: search.level,
     risk_type: search.risk_type,
@@ -53,34 +53,23 @@ function AlertsPage() {
     sku: search.sku,
   })
 
-  const { data: daily } = useQuery({
-    queryKey: queryKeys.dailyReport(monitorDate),
-    queryFn: () => api.dailyReport(monitorDate),
-  })
-
-  useEffect(() => {
-    if (daily?.monitor_date && !monitorDate) setMonitorDate(daily.monitor_date)
-  }, [daily?.monitor_date, monitorDate, setMonitorDate])
-
-  const effectiveDate = monitorDate ?? daily?.monitor_date
-
   const { data: meta } = useQuery({
-    queryKey: queryKeys.alertsMeta(effectiveDate),
-    queryFn: () => api.alertsMeta(effectiveDate),
-    enabled: !!effectiveDate,
+    queryKey: queryKeys.alertsMeta(selectedSnapshotId),
+    queryFn: () => api.alertsMeta(selectedSnapshotId),
+    enabled: selectedSnapshotId !== undefined,
   })
 
   const { data: analytics } = useQuery({
-    queryKey: queryKeys.reportAnalytics(effectiveDate),
-    queryFn: () => api.reportAnalytics(effectiveDate),
-    enabled: !!effectiveDate,
+    queryKey: queryKeys.reportAnalytics(selectedSnapshotId),
+    queryFn: () => api.reportAnalytics(selectedSnapshotId),
+    enabled: selectedSnapshotId !== undefined,
   })
 
   const alertParams: Record<string, string | number> = {
     page: search.page ?? 1,
     page_size: PAGE_SIZE,
   }
-  if (effectiveDate) alertParams.monitor_date = effectiveDate
+  if (selectedSnapshotId) alertParams.snapshot_id = selectedSnapshotId
   if (search.level) alertParams.level = search.level
   if (search.risk_type) alertParams.risk_type = search.risk_type
   if (search.warehouse) alertParams.warehouse = search.warehouse
@@ -89,7 +78,7 @@ function AlertsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.alerts(alertParams),
     queryFn: () => api.alerts(alertParams),
-    enabled: !!effectiveDate,
+    enabled: selectedSnapshotId !== undefined,
   })
 
   const levels = analytics?.level_counts ?? {}

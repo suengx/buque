@@ -14,10 +14,8 @@ from buque.models.entities import ErpSyncPhase
 from buque.schemas.api import PipelineRunResult
 from buque.services.erp_sync_job import (
     append_log,
-    finish_analysis_success,
     finish_job_failed,
-    finish_sync_success,
-    has_running_sync_job,
+    finish_pipeline_success,
     update_job_phase,
 )
 from buque.services.monitor_pipeline import run_analysis_pipeline
@@ -26,10 +24,6 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 PhaseCallback = Callable[[ErpSyncPhase, str], None]
-
-
-def has_running_erp_sync(db: Session) -> bool:
-    return has_running_sync_job(db)
 
 
 def _build_sync_summary(sync_result: ErpSyncResult, started_at, finished_at) -> dict:
@@ -58,6 +52,7 @@ def _build_sync_summary(sync_result: ErpSyncResult, started_at, finished_at) -> 
 def run_sync_ingestion(
     db: Session,
     monitor_date: date,
+    snapshot_id: int,
     *,
     ingestion: Literal["erp", "fixtures"],
     on_phase: PhaseCallback | None = None,
@@ -69,6 +64,7 @@ def run_sync_ingestion(
         return run_ingestion_from_files(
             db,
             monitor_date,
+            snapshot_id,
             inventory_file=fixture_dir / "inventory.csv",
             orders_file=fixture_dir / "orders.csv",
             inbound_file=fixture_dir / "inbound.csv",
@@ -81,16 +77,16 @@ def run_sync_ingestion(
         if on_phase:
             on_phase(phase, message)
 
-    return run_ingestion_from_erp(db, monitor_date, on_phase=report)
+    return run_ingestion_from_erp(db, monitor_date, snapshot_id, on_phase=report)
 
 
-def run_sync_job(
+def run_pipeline_job(
     db: Session,
     monitor_date: date,
     job_id: int,
     *,
     ingestion: Literal["erp", "fixtures"] = "erp",
-) -> ErpSyncResult:
+) -> None:
     from buque.models.entities import ErpSyncJob, IngestionStatus
 
     job = db.get(ErpSyncJob, job_id)
@@ -101,47 +97,41 @@ def run_sync_job(
         append_log(db, job_id, "INFO", message)
 
     try:
-        sync_result = run_sync_ingestion(db, monitor_date, ingestion=ingestion, on_phase=on_phase)
+        sync_result = run_sync_ingestion(
+            db, monitor_date, job_id, ingestion=ingestion, on_phase=on_phase
+        )
         failed = [s for s in sync_result.sources if s.status != "SUCCESS"]
         if failed:
             errors = "; ".join(f"{s.source}: {s.error or s.status}" for s in failed)
             finish_job_failed(db, job_id, errors)
             raise RuntimeError(errors)
 
+        def on_progress(
+            phase: ErpSyncPhase,
+            message: str,
+            current: int | None,
+            total: int | None,
+        ) -> None:
+            update_job_phase(
+                db,
+                job_id,
+                phase,
+                message,
+                progress_current=current,
+                progress_total=total,
+            )
+            append_log(db, job_id, "INFO", message)
+
+        analysis_summary = run_analysis_pipeline(
+            db, monitor_date, job_id, on_progress=on_progress
+        )
         finished_at = datetime_now()
-        summary = _build_sync_summary(sync_result, started_at, finished_at)
-        finish_sync_success(db, job_id, summary)
-        return sync_result
+        sync_summary = _build_sync_summary(sync_result, started_at, finished_at)
+        finish_pipeline_success(db, job_id, sync_summary, analysis_summary)
     except Exception as exc:
         job = db.get(ErpSyncJob, job_id)
         if job and job.status == IngestionStatus.RUNNING:
             finish_job_failed(db, job_id, str(exc))
-        raise
-
-
-def run_analysis_job(db: Session, monitor_date: date, job_id: int) -> dict[str, int]:
-    def on_progress(
-        phase: ErpSyncPhase,
-        message: str,
-        current: int | None,
-        total: int | None,
-    ) -> None:
-        update_job_phase(
-            db,
-            job_id,
-            phase,
-            message,
-            progress_current=current,
-            progress_total=total,
-        )
-        append_log(db, job_id, "INFO", message)
-
-    try:
-        summary = run_analysis_pipeline(db, monitor_date, on_progress=on_progress)
-        finish_analysis_success(db, job_id, summary)
-        return summary
-    except Exception as exc:
-        finish_job_failed(db, job_id, str(exc))
         raise
 
 
@@ -151,15 +141,21 @@ def run_full_pipeline(
     *,
     ingestion: Literal["erp", "fixtures"],
 ) -> PipelineRunResult:
-    sync_result = run_sync_ingestion(db, monitor_date, ingestion=ingestion)
-    analysis = run_analysis_pipeline(db, monitor_date)
+    from buque.services.erp_sync_job import create_pipeline_job
+
+    job = create_pipeline_job(db, monitor_date)
+    run_pipeline_job(db, monitor_date, job.id, ingestion=ingestion)
+    db.refresh(job)
+    analysis = job.analysis_summary or {}
+    sync_counts = (job.sync_summary or {}).get("ingestion_counts", {})
     return PipelineRunResult(
+        snapshot_id=job.id,
         monitor_date=monitor_date,
-        ingestion=sync_result.ingestion_counts,
-        quality_issues=analysis["quality_issues"],
-        monitor_results=analysis["monitor_results"],
-        events=analysis["events"],
-        explained=analysis["explained"],
+        ingestion=sync_counts,
+        quality_issues=analysis.get("quality_issues", 0),
+        monitor_results=analysis.get("monitor_results", 0),
+        events=analysis.get("events", 0),
+        explained=analysis.get("explained", 0),
     )
 
 

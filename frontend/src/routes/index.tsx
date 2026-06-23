@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
 import {
   BellRing,
   Boxes,
@@ -12,7 +11,7 @@ import {
   TrendingDown,
 } from 'lucide-react'
 import { api, queryKeys } from '#/lib/api'
-import { useMonitorDate } from '#/context/MonitorDateContext'
+import { useSnapshot } from '#/context/SnapshotContext'
 import { DailyTrendPanel } from '#/components/buque/DailyTrendPanel'
 import { DistributionPanel } from '#/components/buque/DistributionPanel'
 import { MetricCard } from '#/components/buque/MetricCard'
@@ -28,28 +27,37 @@ function pct(count: number, total: number) {
   return `${((count / total) * 100).toFixed(1)}%`
 }
 
+function snapshotSubtitle(snapshot: { monitor_date: string; finished_at: string | null } | undefined) {
+  if (!snapshot) return undefined
+  const time = snapshot.finished_at
+    ? new Date(snapshot.finished_at).toLocaleString('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    : '—'
+  return `当前快照 ${time} · 业务日 ${snapshot.monitor_date}`
+}
+
 function DailyReportPage() {
   const navigate = useNavigate()
-  const { monitorDate, setMonitorDate } = useMonitorDate()
+  const { selectedSnapshotId, selectedSnapshot } = useSnapshot()
 
   const { data: daily, isLoading, error } = useQuery({
-    queryKey: queryKeys.dailyReport(monitorDate),
-    queryFn: () => api.dailyReport(monitorDate),
+    queryKey: queryKeys.dailyReport(selectedSnapshotId),
+    queryFn: () => api.dailyReport(selectedSnapshotId),
+    enabled: selectedSnapshotId !== undefined,
   })
 
   const { data: analytics } = useQuery({
-    queryKey: queryKeys.reportAnalytics(monitorDate ?? daily?.monitor_date),
-    queryFn: () => api.reportAnalytics(monitorDate ?? daily?.monitor_date),
-    enabled: !!(monitorDate ?? daily?.monitor_date),
+    queryKey: queryKeys.reportAnalytics(selectedSnapshotId),
+    queryFn: () => api.reportAnalytics(selectedSnapshotId),
+    enabled: selectedSnapshotId !== undefined,
   })
 
-  useEffect(() => {
-    if (daily?.monitor_date && !monitorDate) {
-      setMonitorDate(daily.monitor_date)
-    }
-  }, [daily?.monitor_date, monitorDate, setMonitorDate])
-
-  const effectiveDate = monitorDate ?? daily?.monitor_date
   const levels = analytics?.level_counts ?? {}
   const totalAlerts =
     (levels.RED ?? 0) + (levels.ORANGE ?? 0) + (levels.YELLOW ?? 0)
@@ -58,6 +66,7 @@ function DailyReportPage() {
     navigate({ to: '/alerts', search })
   }
 
+  if (!selectedSnapshotId) return <div className="demo-muted">加载快照…</div>
   if (isLoading) return <div className="demo-muted">加载日报...</div>
   if (error) return <div className="text-[var(--status-danger)]">无法加载日报，请确认后端已启动。</div>
   if (!daily) return null
@@ -66,8 +75,8 @@ function DailyReportPage() {
     <div className="buque-page-stack">
       <PageHeader
         title="日报总览"
-        subtitle={effectiveDate ? `监控日期 ${effectiveDate}` : undefined}
-        tooltip="仓库作用域监控指标；运行分析后刷新。红灯须当天确认。"
+        subtitle={snapshotSubtitle(selectedSnapshot)}
+        tooltip="仓库作用域监控指标；完成同步并分析后刷新。红灯须当天确认。"
       />
 
       <SectionBlock label="总览" description="当日监控规模与预警总量">
@@ -151,12 +160,12 @@ function DailyReportPage() {
         </div>
       </SectionBlock>
 
-      <SectionBlock label="趋势" description="近 7 日变化与较昨日新增">
-        {analytics ? (
+      <SectionBlock label="趋势" description="近 7 日走势与等级新增对比">
+        {analytics && daily ? (
           <DailyTrendPanel
             trend={analytics.trend_7d}
-            newRed={daily.new_red_count}
-            newOrange={daily.new_orange_count}
+            comparisonVsPrevDay={daily.comparison_vs_prev_day}
+            comparisonVsPrevSnapshot={daily.comparison_vs_prev_snapshot}
           />
         ) : null}
       </SectionBlock>

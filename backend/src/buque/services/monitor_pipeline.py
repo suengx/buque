@@ -45,25 +45,19 @@ EXPLANATION_TAGS = [
 
 
 class MonitorPersistence:
-    def __init__(self, db: Session, monitor_date: date):
+    def __init__(self, db: Session, monitor_date: date, snapshot_id: int):
         self.db = db
         self.monitor_date = monitor_date
+        self.snapshot_id = snapshot_id
 
     def persist_findings(self, findings: list[MonitorFinding]) -> list[FactMonitorResult]:
         saved: list[FactMonitorResult] = []
         for f in findings:
-            existing = (
-                self.db.query(FactMonitorResult)
-                .filter(
-                    FactMonitorResult.date == self.monitor_date,
-                    FactMonitorResult.sku == f.sku,
-                    FactMonitorResult.warehouse == f.warehouse,
-                    FactMonitorResult.scope == f.scope,
-                    FactMonitorResult.risk_type == f.risk_type,
-                )
-                .first()
-            )
-            payload = dict(
+            row = FactMonitorResult(
+                snapshot_id=self.snapshot_id,
+                date=self.monitor_date,
+                sku=f.sku,
+                warehouse=f.warehouse,
                 channel=f.channel,
                 risk_level=f.risk_level,
                 trigger_rule=f.trigger_rule,
@@ -75,21 +69,10 @@ class MonitorPersistence:
                 relief_note=f.relief_note,
                 requires_explanation=f.requires_explanation,
                 requires_human_confirm=f.requires_human_confirm,
+                scope=f.scope,
+                risk_type=f.risk_type,
             )
-            if existing:
-                for key, value in payload.items():
-                    setattr(existing, key, value)
-                row = existing
-            else:
-                row = FactMonitorResult(
-                    date=self.monitor_date,
-                    sku=f.sku,
-                    warehouse=f.warehouse,
-                    **payload,
-                    scope=f.scope,
-                    risk_type=f.risk_type,
-                )
-                self.db.add(row)
+            self.db.add(row)
             saved.append(row)
         self.db.commit()
         for row in saved:
@@ -97,14 +80,15 @@ class MonitorPersistence:
         return saved
 
     def build_event_pool(self, results: list[FactMonitorResult]) -> list[EventPool]:
-        self.db.query(EventPool).filter(EventPool.date == self.monitor_date).delete()
-        self.db.commit()
         events: list[EventPool] = []
         for r in results:
             if not qualifies_for_event_pool(r):
                 continue
-            event_id = event_id_for(self.monitor_date, r.sku, r.warehouse, r.risk_type)
+            event_id = event_id_for(
+                self.snapshot_id, self.monitor_date, r.sku, r.warehouse, r.risk_type
+            )
             ev = EventPool(
+                snapshot_id=self.snapshot_id,
                 event_id=event_id,
                 date=r.date,
                 sku=r.sku,
@@ -144,13 +128,14 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
     def build_sku_context(
         self,
         monitor_date: date,
+        snapshot_id: int,
         sku: str,
         warehouse: str | None,
     ) -> dict:
         inv = (
             self.db.query(FactInventoryDaily)
             .filter(
-                FactInventoryDaily.date == monitor_date,
+                FactInventoryDaily.snapshot_id == snapshot_id,
                 FactInventoryDaily.sku == sku,
             )
             .all()
@@ -161,7 +146,7 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
         sales = (
             self.db.query(FactSalesDaily)
             .filter(
-                FactSalesDaily.date == monitor_date,
+                FactSalesDaily.snapshot_id == snapshot_id,
                 FactSalesDaily.sku == sku,
             )
             .limit(30)
@@ -169,7 +154,7 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
         )
 
         inbound_q = self.db.query(FactInboundBatch).filter(
-            FactInboundBatch.date == monitor_date,
+            FactInboundBatch.snapshot_id == snapshot_id,
             FactInboundBatch.sku == sku,
         )
         if warehouse:
@@ -177,7 +162,7 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
         inbound = inbound_q.all()
 
         monitor_q = self.db.query(FactMonitorResult).filter(
-            FactMonitorResult.date == monitor_date,
+            FactMonitorResult.snapshot_id == snapshot_id,
             FactMonitorResult.sku == sku,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
@@ -234,12 +219,13 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
     def explain_sku_on_demand(
         self,
         monitor_date: date,
+        snapshot_id: int,
         sku: str,
         warehouse: str | None,
     ) -> dict:
         if settings.llm_explain_mode == "off" or not settings.llm_api_key or not settings.llm_api_base:
             monitor_q = self.db.query(FactMonitorResult).filter(
-                FactMonitorResult.date == monitor_date,
+                FactMonitorResult.snapshot_id == snapshot_id,
                 FactMonitorResult.sku == sku,
                 FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
             )
@@ -252,7 +238,7 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
             payload["confidence_note"] = "规则解释（LLM 未启用）"
             return payload
 
-        context = self.build_sku_context(monitor_date, sku, warehouse)
+        context = self.build_sku_context(monitor_date, snapshot_id, sku, warehouse)
         user_content = json.dumps(context, ensure_ascii=False)
         with httpx.Client(timeout=60) as client:
             resp = client.post(
@@ -273,7 +259,7 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
             payload["confidence_note"] = payload.get("confidence_note") or "Agent 深度分析"
 
         monitor_q = self.db.query(FactMonitorResult).filter(
-            FactMonitorResult.date == monitor_date,
+            FactMonitorResult.snapshot_id == snapshot_id,
             FactMonitorResult.sku == sku,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
@@ -281,11 +267,11 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
             monitor_q = monitor_q.filter(FactMonitorResult.warehouse == warehouse)
         result = monitor_q.order_by(FactMonitorResult.risk_level.desc()).first()
         if result:
-            eid = event_id_for(monitor_date, sku, result.warehouse, result.risk_type)
+            eid = event_id_for(snapshot_id, monitor_date, sku, result.warehouse, result.risk_type)
             existing = (
                 self.db.query(FactAgentExplain)
                 .filter(
-                    FactAgentExplain.date == monitor_date,
+                    FactAgentExplain.snapshot_id == snapshot_id,
                     FactAgentExplain.event_id == eid,
                 )
                 .first()
@@ -309,6 +295,7 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
             else:
                 self.db.add(
                     FactAgentExplain(
+                        snapshot_id=snapshot_id,
                         date=monitor_date,
                         sku=sku,
                         event_id=eid,
@@ -319,16 +306,22 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
         return payload
 
 
-def run_rules(db: Session, monitor_date: date) -> list[FactMonitorResult]:
+def run_rules(db: Session, monitor_date: date, snapshot_id: int) -> list[FactMonitorResult]:
     cfg = RuleConfigService(db)
-    findings = RuleEngine(db, monitor_date, cfg).run()
-    return MonitorPersistence(db, monitor_date).persist_findings(findings)
+    findings = RuleEngine(db, monitor_date, snapshot_id, cfg).run()
+    return MonitorPersistence(db, monitor_date, snapshot_id).persist_findings(findings)
 
 
-def run_event_pool_and_explain(db: Session, monitor_date: date) -> tuple[int, int]:
-    results = db.query(FactMonitorResult).filter(FactMonitorResult.date == monitor_date).all()
-    events = MonitorPersistence(db, monitor_date).build_event_pool(results)
-    explained = persist_rule_explanations(db, monitor_date)
+def run_event_pool_and_explain(
+    db: Session, monitor_date: date, snapshot_id: int
+) -> tuple[int, int]:
+    results = (
+        db.query(FactMonitorResult)
+        .filter(FactMonitorResult.snapshot_id == snapshot_id)
+        .all()
+    )
+    events = MonitorPersistence(db, monitor_date, snapshot_id).build_event_pool(results)
+    explained = persist_rule_explanations(db, monitor_date, snapshot_id)
     return len(events), explained
 
 
@@ -341,6 +334,7 @@ AnalysisProgressCallback = Callable[
 def run_analysis_pipeline(
     db: Session,
     monitor_date: date,
+    snapshot_id: int,
     on_progress: AnalysisProgressCallback | None = None,
 ) -> dict[str, int]:
     from buque.quality.checker import DataQualityChecker
@@ -355,13 +349,13 @@ def run_analysis_pipeline(
             on_progress(phase, message, current, total)
 
     report(ErpSyncPhase.QUALITY, "数据质量检查…")
-    issues = DataQualityChecker(db, monitor_date).run()
+    issues = DataQualityChecker(db, monitor_date, snapshot_id).run()
 
     report(ErpSyncPhase.RULES, "规则计算…")
-    results = run_rules(db, monitor_date)
+    results = run_rules(db, monitor_date, snapshot_id)
 
     report(ErpSyncPhase.EVENTS, "构建事件池…")
-    events = MonitorPersistence(db, monitor_date).build_event_pool(results)
+    events = MonitorPersistence(db, monitor_date, snapshot_id).build_event_pool(results)
     event_count = len(events)
 
     def explain_progress(done: int, total: int) -> None:
@@ -373,7 +367,9 @@ def run_analysis_pipeline(
         )
 
     report(ErpSyncPhase.EXPLAIN, "应用解释规则…", 0, event_count)
-    explained = persist_rule_explanations(db, monitor_date, on_progress=explain_progress)
+    explained = persist_rule_explanations(
+        db, monitor_date, snapshot_id, on_progress=explain_progress
+    )
 
     return {
         "quality_issues": len(issues),

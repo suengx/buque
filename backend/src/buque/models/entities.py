@@ -92,11 +92,12 @@ class DimMskuMapping(Base):
 class FactSalesDaily(Base):
     __tablename__ = "fact_sales_daily"
     __table_args__ = (
-        UniqueConstraint("date", "msku", "channel", name="uq_sales_daily"),
+        UniqueConstraint("snapshot_id", "date", "msku", "channel", name="uq_sales_daily"),
         Index("ix_sales_sku_date", "sku", "date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     msku: Mapped[str] = mapped_column(String(128))
     channel: Mapped[str] = mapped_column(String(64))
@@ -107,9 +108,12 @@ class FactSalesDaily(Base):
 
 class FactInventoryDaily(Base):
     __tablename__ = "fact_inventory_daily"
-    __table_args__ = (UniqueConstraint("date", "sku", "warehouse", name="uq_inventory_daily"),)
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "sku", "warehouse", name="uq_inventory_daily"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     sku: Mapped[str] = mapped_column(String(64), ForeignKey("dim_sku.sku"), index=True)
     warehouse: Mapped[str] = mapped_column(String(128))
@@ -124,10 +128,13 @@ class FactInventoryDaily(Base):
 class FactInboundBatch(Base):
     __tablename__ = "fact_inbound_batch"
     __table_args__ = (
-        UniqueConstraint("date", "sku", "warehouse", "batch_id", name="uq_inbound_batch"),
+        UniqueConstraint(
+            "snapshot_id", "sku", "warehouse", "batch_id", name="uq_inbound_batch"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     sku: Mapped[str] = mapped_column(String(64), ForeignKey("dim_sku.sku"), index=True)
     warehouse: Mapped[str] = mapped_column(String(128))
@@ -170,11 +177,17 @@ class FactMonitorResult(Base):
     __tablename__ = "fact_monitor_result"
     __table_args__ = (
         UniqueConstraint(
-            "date", "sku", "warehouse", "scope", "risk_type", name="uq_monitor_result"
+            "snapshot_id",
+            "sku",
+            "warehouse",
+            "scope",
+            "risk_type",
+            name="uq_monitor_result",
         ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     sku: Mapped[str] = mapped_column(String(64), ForeignKey("dim_sku.sku"), index=True)
     warehouse: Mapped[str | None] = mapped_column(String(128))
@@ -201,6 +214,7 @@ class EventPool(Base):
     __table_args__ = (UniqueConstraint("event_id", name="uq_event_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     event_id: Mapped[str] = mapped_column(String(64))
     date: Mapped[date] = mapped_column(Date, index=True)
     sku: Mapped[str] = mapped_column(String(64), ForeignKey("dim_sku.sku"), index=True)
@@ -218,9 +232,12 @@ class EventPool(Base):
 
 class FactAgentExplain(Base):
     __tablename__ = "fact_agent_explain"
-    __table_args__ = (UniqueConstraint("date", "sku", "event_id", name="uq_agent_explain"),)
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "sku", "event_id", name="uq_agent_explain"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     sku: Mapped[str] = mapped_column(String(64), ForeignKey("dim_sku.sku"), index=True)
     event_id: Mapped[str] = mapped_column(String(64))
@@ -284,6 +301,7 @@ class ErpSyncPhase(str, enum.Enum):
 class JobKind(str, enum.Enum):
     SYNC = "SYNC"
     ANALYSIS = "ANALYSIS"
+    PIPELINE = "PIPELINE"
 
 
 class ErpSyncJob(Base):
@@ -323,6 +341,7 @@ class DataQualityIssue(Base):
     __tablename__ = "data_quality_issue"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
     sku: Mapped[str | None] = mapped_column(String(64), index=True)
     warehouse: Mapped[str | None] = mapped_column(String(128))

@@ -75,9 +75,16 @@ class MonitorFinding:
 
 
 class RuleEngine:
-    def __init__(self, db: Session, monitor_date: date, cfg: RuleConfigService | None = None):
+    def __init__(
+        self,
+        db: Session,
+        monitor_date: date,
+        snapshot_id: int,
+        cfg: RuleConfigService | None = None,
+    ):
         self.db = db
         self.monitor_date = monitor_date
+        self.snapshot_id = snapshot_id
         self.cfg = cfg or RuleConfigService(db)
 
     def run(self) -> list[MonitorFinding]:
@@ -91,7 +98,7 @@ class RuleEngine:
         rows = (
             self.db.query(FactInventoryDaily, DimSku)
             .join(DimSku, DimSku.sku == FactInventoryDaily.sku)
-            .filter(FactInventoryDaily.date == self.monitor_date)
+            .filter(FactInventoryDaily.snapshot_id == self.snapshot_id)
             .all()
         )
         findings: list[MonitorFinding] = []
@@ -144,7 +151,7 @@ class RuleEngine:
 
     def _evaluate_global_scope(self) -> list[MonitorFinding]:
         sku_rows = self.db.query(FactInventoryDaily).filter(
-            FactInventoryDaily.date == self.monitor_date
+            FactInventoryDaily.snapshot_id == self.snapshot_id
         ).all()
         by_sku: dict[str, list[FactInventoryDaily]] = {}
         for row in sku_rows:
@@ -183,7 +190,11 @@ class RuleEngine:
     def _evaluate_channel_scope(self) -> list[MonitorFinding]:
         sales = (
             self.db.query(FactSalesDaily)
-            .filter(FactSalesDaily.date == self.monitor_date, FactSalesDaily.sku.isnot(None))
+            .filter(
+                FactSalesDaily.snapshot_id == self.snapshot_id,
+                FactSalesDaily.date == self.monitor_date,
+                FactSalesDaily.sku.isnot(None),
+            )
             .all()
         )
         by_key: dict[tuple[str, str], int] = {}
@@ -202,7 +213,7 @@ class RuleEngine:
             inv_total = (
                 self.db.query(FactInventoryDaily)
                 .filter(
-                    FactInventoryDaily.date == self.monitor_date,
+                    FactInventoryDaily.snapshot_id == self.snapshot_id,
                     FactInventoryDaily.sku == sku_code,
                 )
                 .all()
@@ -230,6 +241,7 @@ class RuleEngine:
         self, sku: str, warehouse: str | None, scope: MonitoringScope
     ) -> dict[str, Decimal]:
         q = self.db.query(FactSalesDaily).filter(
+            FactSalesDaily.snapshot_id == self.snapshot_id,
             FactSalesDaily.date <= self.monitor_date,
             FactSalesDaily.sku == sku,
         )
@@ -414,7 +426,7 @@ class RuleEngine:
         batches = (
             self.db.query(FactInboundBatch)
             .filter(
-                FactInboundBatch.date == self.monitor_date,
+                FactInboundBatch.snapshot_id == self.snapshot_id,
                 FactInboundBatch.sku == sku,
                 FactInboundBatch.warehouse == warehouse,
                 FactInboundBatch.eligible_for_relief.is_(True),

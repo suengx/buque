@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from buque.config import get_settings
 from buque.db import get_db
 from buque.models.entities import (
     DimSku,
+    ErpSyncJob,
     FactAgentExplain,
     FactFeedback,
     FactMonitorResult,
@@ -25,24 +27,26 @@ from buque.schemas.api import (
     FeedbackStats,
     MonitorResultOut,
     PaginatedAlerts,
-    PipelineRunResult,
     ReportAnalyticsOut,
     SkuDetailOut,
+    TrendComparison,
     TrendPoint,
 )
 from buque.services.monitor_pipeline import ExplainerAgent
+from buque.services.snapshot_query import (
+    get_snapshot,
+    latest_snapshot_for_date,
+    previous_snapshot,
+    resolve_snapshot_id,
+)
 
 router = APIRouter(prefix="/api/v1")
 
 
-def _latest_monitor_date(db: Session) -> date | None:
-    return db.query(func.max(FactMonitorResult.date)).scalar()
-
-
-def _explain_for(db: Session, md: date, sku: str) -> FactAgentExplain | None:
+def _explain_for(db: Session, snapshot_id: int, sku: str) -> FactAgentExplain | None:
     return (
         db.query(FactAgentExplain)
-        .filter(FactAgentExplain.date == md, FactAgentExplain.sku == sku)
+        .filter(FactAgentExplain.snapshot_id == snapshot_id, FactAgentExplain.sku == sku)
         .order_by(FactAgentExplain.id.desc())
         .first()
     )
@@ -73,6 +77,74 @@ def _result_to_out(result: FactMonitorResult, sku: DimSku | None, explain: FactA
     )
 
 
+def _level_counts_for_snapshot(db: Session, snapshot_id: int) -> dict[str, int]:
+    base_q = db.query(FactMonitorResult).filter(
+        FactMonitorResult.snapshot_id == snapshot_id,
+        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+    )
+    level_counts = {level.value: 0 for level in RiskLevel}
+    for level, count in (
+        base_q.with_entities(FactMonitorResult.risk_level, func.count())
+        .group_by(FactMonitorResult.risk_level)
+        .all()
+    ):
+        level_counts[level.value] = count
+    return level_counts
+
+
+def _sku_set_for_level(db: Session, snapshot_id: int, level: RiskLevel) -> set[str]:
+    return {
+        r.sku
+        for r in db.query(FactMonitorResult)
+        .filter(
+            FactMonitorResult.snapshot_id == snapshot_id,
+            FactMonitorResult.risk_level == level,
+            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+        )
+        .all()
+    }
+
+
+def _count_new_skus(current: set[str], baseline: set[str]) -> int:
+    return len([sku for sku in current if sku not in baseline])
+
+
+def _build_trend_comparison(
+    db: Session,
+    current_sid: int,
+    baseline_job: ErpSyncJob | None,
+    *,
+    baseline_label: str | None,
+    available: bool = True,
+) -> TrendComparison:
+    current_red = _sku_set_for_level(db, current_sid, RiskLevel.RED)
+    current_orange = _sku_set_for_level(db, current_sid, RiskLevel.ORANGE)
+    if baseline_job is None:
+        return TrendComparison(
+            new_red_count=0,
+            new_orange_count=0,
+            baseline_label=baseline_label,
+            baseline_snapshot_id=None,
+            available=available,
+        )
+    prev_red = _sku_set_for_level(db, baseline_job.id, RiskLevel.RED)
+    prev_orange = _sku_set_for_level(db, baseline_job.id, RiskLevel.ORANGE)
+    return TrendComparison(
+        new_red_count=_count_new_skus(current_red, prev_red),
+        new_orange_count=_count_new_skus(current_orange, prev_orange),
+        baseline_label=baseline_label,
+        baseline_snapshot_id=baseline_job.id,
+        available=available,
+    )
+
+
+def _format_snapshot_time(finished_at) -> str:
+    if finished_at is None:
+        return "—"
+    tz = get_settings().tz
+    return finished_at.astimezone(tz).strftime("%m/%d %H:%M")
+
+
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "buque"}
@@ -80,20 +152,22 @@ def health() -> dict:
 
 @router.get("/reports/daily", response_model=DailyReportSummary)
 def daily_report(
-    monitor_date: date | None = None,
+    snapshot_id: int | None = None,
     db: Session = Depends(get_db),
 ) -> DailyReportSummary:
-    md = monitor_date or _latest_monitor_date(db) or date.today()
+    sid = resolve_snapshot_id(db, snapshot_id)
+    job = get_snapshot(db, sid)
+    md = job.monitor_date
     prev = md - timedelta(days=1)
 
     base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.date == md,
+        FactMonitorResult.snapshot_id == sid,
         FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
     )
     monitored = (
         db.query(func.count(func.distinct(FactMonitorResult.sku)))
         .filter(
-            FactMonitorResult.date == md,
+            FactMonitorResult.snapshot_id == sid,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
         .scalar()
@@ -106,37 +180,30 @@ def daily_report(
             q = q.filter(FactMonitorResult.risk_type == rtype)
         return q.count()
 
-    prev_red = set(
-        r.sku
-        for r in db.query(FactMonitorResult)
-        .filter(
-            FactMonitorResult.date == prev,
-            FactMonitorResult.risk_level == RiskLevel.RED,
-            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-        )
-        .all()
-    )
-    today_red = [
-        r.sku
-        for r in base_q.filter(FactMonitorResult.risk_level == RiskLevel.RED).all()
-    ]
-    new_red = len([s for s in today_red if s not in prev_red])
+    prev_snapshot = latest_snapshot_for_date(db, prev)
+    prev_day_label = f"昨日 {prev.isoformat()}"
+    if prev_snapshot:
+        prev_day_label = f"昨日快照 {_format_snapshot_time(prev_snapshot.finished_at)}"
 
-    prev_orange = set(
-        r.sku
-        for r in db.query(FactMonitorResult)
-        .filter(
-            FactMonitorResult.date == prev,
-            FactMonitorResult.risk_level == RiskLevel.ORANGE,
-            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-        )
-        .all()
+    prev_chain = previous_snapshot(db, sid)
+    prev_chain_label = (
+        f"上序快照 {_format_snapshot_time(prev_chain.finished_at)}" if prev_chain else None
     )
-    today_orange = [
-        r.sku
-        for r in base_q.filter(FactMonitorResult.risk_level == RiskLevel.ORANGE).all()
-    ]
-    new_orange = len([s for s in today_orange if s not in prev_orange])
+
+    comparison_vs_prev_day = _build_trend_comparison(
+        db,
+        sid,
+        prev_snapshot,
+        baseline_label=prev_day_label,
+        available=True,
+    )
+    comparison_vs_prev_snapshot = _build_trend_comparison(
+        db,
+        sid,
+        prev_chain,
+        baseline_label=prev_chain_label,
+        available=prev_chain is not None,
+    )
 
     stockout_hr = base_q.filter(
         FactMonitorResult.risk_type == RiskType.STOCKOUT,
@@ -148,10 +215,13 @@ def daily_report(
     ).count()
 
     return DailyReportSummary(
+        snapshot_id=sid,
         monitor_date=md,
         monitored_sku_count=monitored,
-        new_red_count=new_red,
-        new_orange_count=new_orange,
+        new_red_count=comparison_vs_prev_day.new_red_count,
+        new_orange_count=comparison_vs_prev_day.new_orange_count,
+        comparison_vs_prev_day=comparison_vs_prev_day,
+        comparison_vs_prev_snapshot=comparison_vs_prev_snapshot,
         stockout_high_risk_count=stockout_hr,
         slow_moving_high_risk_count=slow_hr,
         sales_anomaly_count=_count(RiskLevel.ORANGE, RiskType.SALES_ANOMALY)
@@ -166,22 +236,19 @@ def daily_report(
 
 @router.get("/reports/analytics", response_model=ReportAnalyticsOut)
 def report_analytics(
-    monitor_date: date | None = None,
+    snapshot_id: int | None = None,
     db: Session = Depends(get_db),
 ) -> ReportAnalyticsOut:
-    md = monitor_date or _latest_monitor_date(db) or date.today()
+    sid = resolve_snapshot_id(db, snapshot_id)
+    job = get_snapshot(db, sid)
+    md = job.monitor_date
+
     base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.date == md,
+        FactMonitorResult.snapshot_id == sid,
         FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
     )
 
-    level_counts = {level.value: 0 for level in RiskLevel}
-    for level, count in (
-        base_q.with_entities(FactMonitorResult.risk_level, func.count())
-        .group_by(FactMonitorResult.risk_level)
-        .all()
-    ):
-        level_counts[level.value] = count
+    level_counts = _level_counts_for_snapshot(db, sid)
 
     type_counts: dict[str, int] = {}
     for rtype, count in (
@@ -194,17 +261,10 @@ def report_analytics(
     trend_7d: list[TrendPoint] = []
     for offset in range(6, -1, -1):
         d = md - timedelta(days=offset)
-        day_q = db.query(FactMonitorResult).filter(
-            FactMonitorResult.date == d,
-            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-        )
+        day_snapshot = latest_snapshot_for_date(db, d)
         counts = {level.value: 0 for level in RiskLevel}
-        for level, count in (
-            day_q.with_entities(FactMonitorResult.risk_level, func.count())
-            .group_by(FactMonitorResult.risk_level)
-            .all()
-        ):
-            counts[level.value] = count
+        if day_snapshot:
+            counts = _level_counts_for_snapshot(db, day_snapshot.id)
         trend_7d.append(
             TrendPoint(
                 date=d,
@@ -219,7 +279,7 @@ def report_analytics(
         db.query(FactMonitorResult, DimSku)
         .outerjoin(DimSku, DimSku.sku == FactMonitorResult.sku)
         .filter(
-            FactMonitorResult.date == md,
+            FactMonitorResult.snapshot_id == sid,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
             FactMonitorResult.risk_level == RiskLevel.RED,
             FactMonitorResult.requires_human_confirm.is_(True),
@@ -229,11 +289,12 @@ def report_analytics(
         .all()
     )
     top_priority = [
-        _result_to_out(result, sku, _explain_for(db, md, result.sku))
+        _result_to_out(result, sku, _explain_for(db, sid, result.sku))
         for result, sku in priority_rows
     ]
 
     return ReportAnalyticsOut(
+        snapshot_id=sid,
         monitor_date=md,
         level_counts=level_counts,
         type_counts=type_counts,
@@ -244,12 +305,13 @@ def report_analytics(
 
 @router.get("/alerts/meta", response_model=AlertsMetaOut)
 def alerts_meta(
-    monitor_date: date | None = None,
+    snapshot_id: int | None = None,
     db: Session = Depends(get_db),
 ) -> AlertsMetaOut:
-    md = monitor_date or _latest_monitor_date(db) or date.today()
+    sid = resolve_snapshot_id(db, snapshot_id)
+    job = get_snapshot(db, sid)
     base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.date == md,
+        FactMonitorResult.snapshot_id == sid,
         FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
     )
     warehouses = sorted(
@@ -262,12 +324,17 @@ def alerts_meta(
         .all()
     ):
         type_counts[rtype.value] = count
-    return AlertsMetaOut(monitor_date=md, warehouses=warehouses, type_counts=type_counts)
+    return AlertsMetaOut(
+        snapshot_id=sid,
+        monitor_date=job.monitor_date,
+        warehouses=warehouses,
+        type_counts=type_counts,
+    )
 
 
 @router.get("/alerts", response_model=PaginatedAlerts)
 def list_alerts(
-    monitor_date: date | None = None,
+    snapshot_id: int | None = None,
     level: str | None = None,
     risk_type: str | None = None,
     warehouse: str | None = None,
@@ -276,12 +343,12 @@ def list_alerts(
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> PaginatedAlerts:
-    md = monitor_date or _latest_monitor_date(db) or date.today()
+    sid = resolve_snapshot_id(db, snapshot_id)
     q = (
         db.query(FactMonitorResult, DimSku)
         .outerjoin(DimSku, DimSku.sku == FactMonitorResult.sku)
         .filter(
-            FactMonitorResult.date == md,
+            FactMonitorResult.snapshot_id == sid,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
     )
@@ -304,7 +371,7 @@ def list_alerts(
 
     items: list[MonitorResultOut] = []
     for result, sku_row in rows:
-        explain = _explain_for(db, md, result.sku)
+        explain = _explain_for(db, sid, result.sku)
         items.append(_result_to_out(result, sku_row, explain))
 
     return PaginatedAlerts(items=items, total=total, page=page, page_size=page_size)
@@ -313,13 +380,14 @@ def list_alerts(
 @router.get("/alerts/{sku_id}", response_model=SkuDetailOut)
 def sku_detail(
     sku_id: str,
-    monitor_date: date | None = None,
+    snapshot_id: int | None = None,
     warehouse: str | None = None,
     db: Session = Depends(get_db),
 ) -> SkuDetailOut:
-    md = monitor_date or _latest_monitor_date(db) or date.today()
+    sid = resolve_snapshot_id(db, snapshot_id)
+    job = get_snapshot(db, sid)
     q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.date == md,
+        FactMonitorResult.snapshot_id == sid,
         FactMonitorResult.sku == sku_id,
         FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
     )
@@ -332,12 +400,13 @@ def sku_detail(
     sku = db.get(DimSku, sku_id)
     explain = (
         db.query(FactAgentExplain)
-        .filter(FactAgentExplain.date == md, FactAgentExplain.sku == sku_id)
+        .filter(FactAgentExplain.snapshot_id == sid, FactAgentExplain.sku == sku_id)
         .order_by(FactAgentExplain.id.desc())
         .first()
     )
     return SkuDetailOut(
-        monitor_date=md,
+        snapshot_id=sid,
+        monitor_date=job.monitor_date,
         sku=sku_id,
         product_name=sku.product_name if sku else None,
         warehouse=result.warehouse,
@@ -359,15 +428,16 @@ def sku_detail(
 @router.post("/alerts/{sku_id}/agent-explain", response_model=AgentExplainOut)
 def agent_explain_sku(
     sku_id: str,
-    monitor_date: date | None = None,
+    snapshot_id: int | None = None,
     warehouse: str | None = None,
     db: Session = Depends(get_db),
 ) -> AgentExplainOut:
-    md = monitor_date or _latest_monitor_date(db) or date.today()
+    sid = resolve_snapshot_id(db, snapshot_id)
+    job = get_snapshot(db, sid)
     exists = (
         db.query(FactMonitorResult)
         .filter(
-            FactMonitorResult.date == md,
+            FactMonitorResult.snapshot_id == sid,
             FactMonitorResult.sku == sku_id,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
@@ -376,7 +446,9 @@ def agent_explain_sku(
     if not exists:
         raise HTTPException(status_code=404, detail="SKU 监控结果不存在")
     try:
-        payload = ExplainerAgent(db).explain_sku_on_demand(md, sku_id, warehouse)
+        payload = ExplainerAgent(db).explain_sku_on_demand(
+            job.monitor_date, sid, sku_id, warehouse
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return AgentExplainOut(**payload)
@@ -396,11 +468,12 @@ def create_feedback(payload: FeedbackCreate, db: Session = Depends(get_db)) -> F
         handling_status=HandlingStatus.HANDLED,
     )
     db.add(row)
-    db.query(FactMonitorResult).filter(
-        FactMonitorResult.date == payload.date,
-        FactMonitorResult.sku == payload.sku,
-        FactMonitorResult.risk_type == RiskType(payload.risk_type),
-    ).update({FactMonitorResult.handling_status: HandlingStatus.HANDLED})
+    if payload.snapshot_id is not None:
+        db.query(FactMonitorResult).filter(
+            FactMonitorResult.snapshot_id == payload.snapshot_id,
+            FactMonitorResult.sku == payload.sku,
+            FactMonitorResult.risk_type == RiskType(payload.risk_type),
+        ).update({FactMonitorResult.handling_status: HandlingStatus.HANDLED})
     db.commit()
     db.refresh(row)
     return row

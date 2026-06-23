@@ -7,9 +7,10 @@ from buque.rules.engine import _valid_sales
 
 
 class DataQualityChecker:
-    def __init__(self, db: Session, monitor_date: date):
+    def __init__(self, db: Session, monitor_date: date, snapshot_id: int):
         self.db = db
         self.monitor_date = monitor_date
+        self.snapshot_id = snapshot_id
         self.issues: list[DataQualityIssue] = []
 
     def run(self) -> list[DataQualityIssue]:
@@ -31,6 +32,7 @@ class DataQualityChecker:
     ) -> None:
         self.issues.append(
             DataQualityIssue(
+                snapshot_id=self.snapshot_id,
                 date=self.monitor_date,
                 sku=sku,
                 warehouse=warehouse,
@@ -43,7 +45,7 @@ class DataQualityChecker:
     def _check_negative_inventory(self) -> None:
         rows = (
             self.db.query(FactInventoryDaily)
-            .filter(FactInventoryDaily.date == self.monitor_date)
+            .filter(FactInventoryDaily.snapshot_id == self.snapshot_id)
             .all()
         )
         for row in rows:
@@ -67,7 +69,7 @@ class DataQualityChecker:
         sales = (
             self.db.query(FactSalesDaily)
             .filter(
-                FactSalesDaily.date == self.monitor_date,
+                FactSalesDaily.snapshot_id == self.snapshot_id,
                 FactSalesDaily.sku.is_(None),
             )
             .all()
@@ -91,7 +93,7 @@ class DataQualityChecker:
     def _check_missing_ref_sales(self) -> None:
         rows = (
             self.db.query(FactInventoryDaily)
-            .filter(FactInventoryDaily.date == self.monitor_date)
+            .filter(FactInventoryDaily.snapshot_id == self.snapshot_id)
             .all()
         )
         for row in rows:

@@ -135,9 +135,10 @@ class InventoryParser:
         "product_name": "product_name",
     }
 
-    def __init__(self, db: Session, monitor_date: date):
+    def __init__(self, db: Session, monitor_date: date, snapshot_id: int):
         self.db = db
         self.monitor_date = monitor_date
+        self.snapshot_id = snapshot_id
 
     def ingest_file(self, path: Path) -> int:
         run = _start_run(self.db, "erp_inventory", path)
@@ -163,32 +164,20 @@ class InventoryParser:
                 continue
             _ensure_sku(self.db, sku, product_name)
             warehouse = str(row["warehouse"]).strip()
-
-            existing = (
-                self.db.query(FactInventoryDaily)
-                .filter(
-                    FactInventoryDaily.date == self.monitor_date,
-                    FactInventoryDaily.sku == sku,
-                    FactInventoryDaily.warehouse == warehouse,
+            self.db.add(
+                FactInventoryDaily(
+                    snapshot_id=self.snapshot_id,
+                    date=self.monitor_date,
+                    sku=sku,
+                    warehouse=warehouse,
+                    available_inventory=int(row.get("available_inventory", 0) or 0),
+                    reserved_inventory=int(row.get("reserved_inventory", 0) or 0),
+                    on_hand_inventory=int(row.get("on_hand_inventory", 0) or 0),
+                    in_transit_no_eta=int(row.get("in_transit_no_eta", 0) or 0),
+                    ref_daily_sales=_optional_decimal(row.get("ref_daily_sales")),
+                    turnover_days=_optional_decimal(row.get("turnover_days")),
                 )
-                .first()
             )
-            payload = dict(
-                date=self.monitor_date,
-                sku=sku,
-                warehouse=warehouse,
-                available_inventory=int(row.get("available_inventory", 0) or 0),
-                reserved_inventory=int(row.get("reserved_inventory", 0) or 0),
-                on_hand_inventory=int(row.get("on_hand_inventory", 0) or 0),
-                in_transit_no_eta=int(row.get("in_transit_no_eta", 0) or 0),
-                ref_daily_sales=_optional_decimal(row.get("ref_daily_sales")),
-                turnover_days=_optional_decimal(row.get("turnover_days")),
-            )
-            if existing:
-                for k, v in payload.items():
-                    setattr(existing, k, v)
-            else:
-                self.db.add(FactInventoryDaily(**payload))
             count += 1
         self.db.commit()
         return count
@@ -210,9 +199,10 @@ class OrdersParser:
         "warehouse": "warehouse",
     }
 
-    def __init__(self, db: Session, monitor_date: date):
+    def __init__(self, db: Session, monitor_date: date, snapshot_id: int):
         self.db = db
         self.monitor_date = monitor_date
+        self.snapshot_id = snapshot_id
 
     def ingest_file(self, path: Path) -> int:
         run = _start_run(self.db, "erp_orders", path)
@@ -246,28 +236,16 @@ class OrdersParser:
             channel = str(row["channel"]).strip()
             order_date = row["order_date"]
             sku = _resolve_sku(self.db, msku, channel)
-            existing = (
-                self.db.query(FactSalesDaily)
-                .filter(
-                    FactSalesDaily.date == order_date,
-                    FactSalesDaily.msku == msku,
-                    FactSalesDaily.channel == channel,
+            self.db.add(
+                FactSalesDaily(
+                    snapshot_id=self.snapshot_id,
+                    date=order_date,
+                    msku=msku,
+                    channel=channel,
+                    sku=sku,
+                    order_qty=int(row.get("order_qty", 0) or 0),
                 )
-                .first()
             )
-            if existing:
-                existing.order_qty = int(row.get("order_qty", 0) or 0)
-                existing.sku = sku
-            else:
-                self.db.add(
-                    FactSalesDaily(
-                        date=order_date,
-                        msku=msku,
-                        channel=channel,
-                        sku=sku,
-                        order_qty=int(row.get("order_qty", 0) or 0),
-                    )
-                )
             count += 1
         self.db.commit()
         return count
@@ -289,9 +267,10 @@ class InboundParser:
         "unreceived_qty": "unreceived_qty",
     }
 
-    def __init__(self, db: Session, monitor_date: date, rule_config: RuleConfigService):
+    def __init__(self, db: Session, monitor_date: date, snapshot_id: int, rule_config: RuleConfigService):
         self.db = db
         self.monitor_date = monitor_date
+        self.snapshot_id = snapshot_id
         self.eligible_statuses = set(rule_config.get_list("INBOUND_TMS_ELIGIBLE"))
 
     def ingest_file(self, path: Path) -> int:
@@ -323,31 +302,19 @@ class InboundParser:
             eligible = bool(
                 eta_date and tms_status and tms_status in self.eligible_statuses
             )
-            existing = (
-                self.db.query(FactInboundBatch)
-                .filter(
-                    FactInboundBatch.date == self.monitor_date,
-                    FactInboundBatch.sku == sku,
-                    FactInboundBatch.warehouse == str(row["warehouse"]).strip(),
-                    FactInboundBatch.batch_id == str(row["batch_id"]).strip(),
+            self.db.add(
+                FactInboundBatch(
+                    snapshot_id=self.snapshot_id,
+                    date=self.monitor_date,
+                    sku=sku,
+                    warehouse=str(row["warehouse"]).strip(),
+                    batch_id=str(row["batch_id"]).strip(),
+                    eta_date=eta_date,
+                    tms_status=tms_status,
+                    unreceived_qty=int(row.get("unreceived_qty", 0) or 0),
+                    eligible_for_relief=eligible,
                 )
-                .first()
             )
-            payload = dict(
-                date=self.monitor_date,
-                sku=sku,
-                warehouse=str(row["warehouse"]).strip(),
-                batch_id=str(row["batch_id"]).strip(),
-                eta_date=eta_date,
-                tms_status=tms_status,
-                unreceived_qty=int(row.get("unreceived_qty", 0) or 0),
-                eligible_for_relief=eligible,
-            )
-            if existing:
-                for k, v in payload.items():
-                    setattr(existing, k, v)
-            else:
-                self.db.add(FactInboundBatch(**payload))
             count += 1
         self.db.commit()
         return count

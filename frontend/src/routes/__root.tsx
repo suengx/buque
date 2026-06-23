@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import { MonitorDateProvider } from '../context/MonitorDateContext'
+import { SnapshotProvider } from '../context/SnapshotContext'
 import AppSidebar from '../components/buque/AppSidebar'
 import { ContextDock } from '../components/buque/ContextDock'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
@@ -36,7 +36,7 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body className="font-sans antialiased">
-        <MonitorDateProvider>
+        <SnapshotProvider>
           <AppSidebar />
           <main className="min-h-screen pl-60">
             <ContextDock />
@@ -46,7 +46,7 @@ function RootDocument() {
               </div>
             </div>
           </main>
-        </MonitorDateProvider>
+        </SnapshotProvider>
         <TanStackDevtools
           config={{ position: 'bottom-right' }}
           plugins={[

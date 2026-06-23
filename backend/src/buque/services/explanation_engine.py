@@ -50,12 +50,13 @@ class ExplanationPayload:
 
 
 def event_id_for(
+    snapshot_id: int,
     monitor_date: date,
     sku: str,
     warehouse: str | None,
     risk_type: RiskType,
 ) -> str:
-    return f"{monitor_date.isoformat()}:{sku}:{warehouse}:{risk_type.value}"
+    return f"{snapshot_id}:{monitor_date.isoformat()}:{sku}:{warehouse}:{risk_type.value}"
 
 
 def qualifies_for_event_pool(result: FactMonitorResult) -> bool:
@@ -256,6 +257,7 @@ class ExplanationRuleEngine:
 def persist_rule_explanations(
     db: Session,
     monitor_date: date,
+    snapshot_id: int,
     on_progress: Callable[[int, int], None] | None = None,
 ) -> int:
     """为符合条件的监控结果批量写入 fact_agent_explain（规则引擎，无 LLM）。"""
@@ -263,7 +265,7 @@ def persist_rule_explanations(
     results = (
         db.query(FactMonitorResult)
         .filter(
-            FactMonitorResult.date == monitor_date,
+            FactMonitorResult.snapshot_id == snapshot_id,
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
         .all()
@@ -272,12 +274,12 @@ def persist_rule_explanations(
     total = len(targets)
     count = 0
     for result in targets:
-        eid = event_id_for(monitor_date, result.sku, result.warehouse, result.risk_type)
+        eid = event_id_for(snapshot_id, monitor_date, result.sku, result.warehouse, result.risk_type)
         payload = engine.explain_result(result)
         existing = (
             db.query(FactAgentExplain)
             .filter(
-                FactAgentExplain.date == monitor_date,
+                FactAgentExplain.snapshot_id == snapshot_id,
                 FactAgentExplain.event_id == eid,
             )
             .first()
@@ -298,6 +300,7 @@ def persist_rule_explanations(
         else:
             db.add(
                 FactAgentExplain(
+                    snapshot_id=snapshot_id,
                     date=monitor_date,
                     sku=result.sku,
                     event_id=eid,

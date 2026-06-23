@@ -17,11 +17,17 @@ from buque.ingestion.parsers import (
 from buque.models.entities import (
     DimMskuMapping,
     DimSku,
+    ErpSyncJob,
+    ErpSyncPhase,
     FactInboundBatch,
     FactInventoryDaily,
     FactSalesDaily,
     IngestionRun,
+    IngestionStatus,
+    JobKind,
 )
+
+SNAPSHOT_ID = 1
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "gerpgo_samples"
 
@@ -30,6 +36,7 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "gerpgo_samples"
 def db_session() -> Session:
     engine = create_engine("sqlite:///:memory:")
     for table in (
+        ErpSyncJob.__table__,
         DimSku.__table__,
         DimMskuMapping.__table__,
         IngestionRun.__table__,
@@ -40,6 +47,16 @@ def db_session() -> Session:
         table.create(engine, checkfirst=True)
     factory = sessionmaker(bind=engine)
     session = factory()
+    session.add(
+        ErpSyncJob(
+            id=SNAPSHOT_ID,
+            monitor_date=date(2026, 6, 22),
+            job_kind=JobKind.PIPELINE,
+            phase=ErpSyncPhase.DONE,
+            status=IngestionStatus.SUCCESS,
+        )
+    )
+    session.commit()
     try:
         yield session
     finally:
@@ -73,7 +90,7 @@ def test_inventory_parser_nan_ref_sales(db_session: Session, tmp_path: Path) -> 
     md = date(2026, 6, 22)
     csv = tmp_path / "inv_nan.csv"
     csv.write_text("sku,warehouse,available_inventory,ref_daily_sales\nNAN-SKU,WH1,10,\n", encoding="utf-8")
-    InventoryParser(db_session, md).ingest_file(csv)
+    InventoryParser(db_session, md, SNAPSHOT_ID).ingest_file(csv)
     row = (
         db_session.query(FactInventoryDaily)
         .filter(FactInventoryDaily.sku == "NAN-SKU")
@@ -84,7 +101,7 @@ def test_inventory_parser_nan_ref_sales(db_session: Session, tmp_path: Path) -> 
 
 def test_inventory_parser_gerpgo_sample(db_session: Session) -> None:
     md = date(2026, 6, 22)
-    count = InventoryParser(db_session, md).ingest_file(FIXTURES / "inventory.csv")
+    count = InventoryParser(db_session, md, SNAPSHOT_ID).ingest_file(FIXTURES / "inventory.csv")
     assert count == 2
     row = (
         db_session.query(FactInventoryDaily)
@@ -97,7 +114,7 @@ def test_inventory_parser_gerpgo_sample(db_session: Session) -> None:
 
 def test_orders_parser_multi_day(db_session: Session) -> None:
     md = date(2026, 6, 22)
-    count = OrdersParser(db_session, md).ingest_file(FIXTURES / "orders.csv")
+    count = OrdersParser(db_session, md, SNAPSHOT_ID).ingest_file(FIXTURES / "orders.csv")
     assert count == 3
     dates = {r.date for r in db_session.query(FactSalesDaily).all()}
     assert dates == {date(2026, 6, 20), date(2026, 6, 21), date(2026, 6, 22)}

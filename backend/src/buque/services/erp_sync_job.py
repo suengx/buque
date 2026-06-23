@@ -15,21 +15,21 @@ from buque.models.entities import (
     JobKind,
 )
 from buque.schemas.api import (
-    AnalysisStatusResponse,
-    ErpSyncLatestResponse,
     ErpSyncLogEntry,
-    ErpSyncStatusResponse,
     IngestionSourceStatus,
+    PipelineAccepted,
+    PipelineStatusResponse,
+    SnapshotSummary,
 )
 
 settings = get_settings()
 LOG_TAIL = 50
 
 
-def create_sync_job(db: Session, monitor_date: date) -> ErpSyncJob:
+def create_pipeline_job(db: Session, monitor_date: date) -> ErpSyncJob:
     job = ErpSyncJob(
         monitor_date=monitor_date,
-        job_kind=JobKind.SYNC,
+        job_kind=JobKind.PIPELINE,
         phase=ErpSyncPhase.EXPORTING,
         status=IngestionStatus.RUNNING,
         phase_message="正在登录积加 ERP…",
@@ -38,23 +38,7 @@ def create_sync_job(db: Session, monitor_date: date) -> ErpSyncJob:
     db.add(job)
     db.commit()
     db.refresh(job)
-    append_log(db, job.id, "INFO", "同步任务已启动")
-    return job
-
-
-def create_analysis_job(db: Session, monitor_date: date) -> ErpSyncJob:
-    job = ErpSyncJob(
-        monitor_date=monitor_date,
-        job_kind=JobKind.ANALYSIS,
-        phase=ErpSyncPhase.QUALITY,
-        status=IngestionStatus.RUNNING,
-        phase_message="数据质量检查…",
-        started_at=datetime.now(settings.tz),
-    )
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    append_log(db, job.id, "INFO", "分析任务已启动")
+    append_log(db, job.id, "INFO", "流水线已启动")
     return job
 
 
@@ -91,30 +75,23 @@ def update_job_phase(
     db.commit()
 
 
-def finish_sync_success(db: Session, job_id: int, sync_summary: dict) -> None:
+def finish_pipeline_success(
+    db: Session,
+    job_id: int,
+    sync_summary: dict,
+    analysis_summary: dict,
+) -> None:
     job = db.get(ErpSyncJob, job_id)
     if not job:
         return
     job.phase = ErpSyncPhase.DONE
     job.status = IngestionStatus.SUCCESS
-    job.phase_message = "同步完成"
+    job.phase_message = "同步并分析完成"
     job.sync_summary = sync_summary
-    job.finished_at = datetime.now(settings.tz)
-    db.commit()
-    append_log(db, job_id, "INFO", "同步完成")
-
-
-def finish_analysis_success(db: Session, job_id: int, analysis_summary: dict) -> None:
-    job = db.get(ErpSyncJob, job_id)
-    if not job:
-        return
-    job.phase = ErpSyncPhase.DONE
-    job.status = IngestionStatus.SUCCESS
-    job.phase_message = "分析完成"
     job.analysis_summary = analysis_summary
     job.finished_at = datetime.now(settings.tz)
     db.commit()
-    append_log(db, job_id, "INFO", "分析完成")
+    append_log(db, job_id, "INFO", "流水线完成")
 
 
 def finish_job_failed(db: Session, job_id: int, error: str) -> None:
@@ -123,7 +100,7 @@ def finish_job_failed(db: Session, job_id: int, error: str) -> None:
         return
     job.status = IngestionStatus.FAILED
     job.error_message = error
-    job.phase_message = "任务失败"
+    job.phase_message = "流水线失败"
     job.finished_at = datetime.now(settings.tz)
     db.commit()
     append_log(db, job_id, "ERROR", error)
@@ -151,14 +128,14 @@ def _last_log_at(db: Session, job_id: int) -> datetime | None:
     return created.astimezone(settings.tz)
 
 
-def reconcile_stale_jobs(db: Session, kind: JobKind) -> int:
+def reconcile_stale_jobs(db: Session) -> int:
     now = datetime.now(settings.tz)
     cutoff = now - timedelta(seconds=settings.erp_job_stale_seconds)
     activity_cutoff = now - timedelta(seconds=settings.erp_job_stale_buffer_seconds * 2)
     running_jobs = (
         db.query(ErpSyncJob)
         .filter(
-            ErpSyncJob.job_kind == kind,
+            ErpSyncJob.job_kind == JobKind.PIPELINE,
             ErpSyncJob.status == IngestionStatus.RUNNING,
         )
         .all()
@@ -176,21 +153,12 @@ def reconcile_stale_jobs(db: Session, kind: JobKind) -> int:
     return len(stale_jobs)
 
 
-def has_running_sync_job(db: Session) -> bool:
-    reconcile_stale_jobs(db, JobKind.SYNC)
-    return _has_running_job(db, JobKind.SYNC)
-
-
-def has_running_analysis_job(db: Session) -> bool:
-    reconcile_stale_jobs(db, JobKind.ANALYSIS)
-    return _has_running_job(db, JobKind.ANALYSIS)
-
-
-def _has_running_job(db: Session, kind: JobKind) -> bool:
+def has_running_pipeline_job(db: Session) -> bool:
+    reconcile_stale_jobs(db)
     return (
         db.query(ErpSyncJob)
         .filter(
-            ErpSyncJob.job_kind == kind,
+            ErpSyncJob.job_kind == JobKind.PIPELINE,
             ErpSyncJob.status == IngestionStatus.RUNNING,
         )
         .count()
@@ -198,41 +166,17 @@ def _has_running_job(db: Session, kind: JobKind) -> bool:
     )
 
 
-def get_job(db: Session, job_id: int | None, monitor_date: date, kind: JobKind) -> ErpSyncJob | None:
+def get_pipeline_job(db: Session, job_id: int | None) -> ErpSyncJob | None:
     if job_id is not None:
         job = db.get(ErpSyncJob, job_id)
-        if job and job.job_kind == kind:
+        if job and job.job_kind == JobKind.PIPELINE:
             return job
         return None
-
-    running = (
+    return (
         db.query(ErpSyncJob)
         .filter(
-            ErpSyncJob.monitor_date == monitor_date,
-            ErpSyncJob.job_kind == kind,
+            ErpSyncJob.job_kind == JobKind.PIPELINE,
             ErpSyncJob.status == IngestionStatus.RUNNING,
-        )
-        .order_by(ErpSyncJob.id.desc())
-        .first()
-    )
-    if running:
-        return running
-
-    return (
-        db.query(ErpSyncJob)
-        .filter(ErpSyncJob.monitor_date == monitor_date, ErpSyncJob.job_kind == kind)
-        .order_by(ErpSyncJob.id.desc())
-        .first()
-    )
-
-
-def get_latest_successful_sync(db: Session, monitor_date: date) -> ErpSyncJob | None:
-    return (
-        db.query(ErpSyncJob)
-        .filter(
-            ErpSyncJob.monitor_date == monitor_date,
-            ErpSyncJob.job_kind == JobKind.SYNC,
-            ErpSyncJob.status == IngestionStatus.SUCCESS,
         )
         .order_by(ErpSyncJob.id.desc())
         .first()
@@ -248,11 +192,7 @@ def _job_logs(db: Session, job_id: int) -> list[ErpSyncLogEntry]:
         .all()
     )
     return [
-        ErpSyncLogEntry(
-            level=r.level,
-            message=r.message,
-            created_at=r.created_at,
-        )
+        ErpSyncLogEntry(level=r.level, message=r.message, created_at=r.created_at)
         for r in reversed(rows)
     ]
 
@@ -274,28 +214,27 @@ def _ingestion_runs_for_job(db: Session, job: ErpSyncJob) -> dict[str, Ingestion
     return runs
 
 
-def build_sync_status(
-    db: Session,
-    monitor_date: date,
-    job_id: int | None = None,
-) -> ErpSyncStatusResponse:
-    reconcile_stale_jobs(db, JobKind.SYNC)
-    job = get_job(db, job_id, monitor_date, JobKind.SYNC)
+def build_pipeline_status(db: Session, job_id: int | None = None) -> PipelineStatusResponse:
+    reconcile_stale_jobs(db)
+    job = get_pipeline_job(db, job_id)
     if not job:
         sources = [
             IngestionSourceStatus(source=source, status="PENDING", row_count=0)
             for source in ERP_SOURCES
         ]
-        return ErpSyncStatusResponse(
-            monitor_date=monitor_date,
+        return PipelineStatusResponse(
+            snapshot_id=None,
+            monitor_date=date.today(),
             running=False,
-            job_id=None,
             job_status="PENDING",
             phase=None,
             phase_message=None,
             error=None,
             finished_at=None,
             sync_summary=None,
+            analysis_summary=None,
+            progress_current=None,
+            progress_total=None,
             logs=[],
             sources=sources,
         )
@@ -308,7 +247,6 @@ def build_sync_status(
         if job.status == IngestionStatus.RUNNING and job.phase == ErpSyncPhase.EXPORTING:
             sources.append(IngestionSourceStatus(source=source, status="EXPORTING", row_count=0))
             continue
-
         run = job_runs.get(source)
         if run:
             sources.append(
@@ -327,68 +265,49 @@ def build_sync_status(
         else:
             sources.append(IngestionSourceStatus(source=source, status="PENDING", row_count=0))
 
-    return ErpSyncStatusResponse(
-        monitor_date=monitor_date,
+    return PipelineStatusResponse(
+        snapshot_id=job.id,
+        monitor_date=job.monitor_date,
         running=running,
-        job_id=job.id,
         job_status=job.status.value,
         phase=job.phase.value,
         phase_message=job.phase_message,
         error=job.error_message,
         finished_at=job.finished_at,
         sync_summary=job.sync_summary,
+        analysis_summary=job.analysis_summary,
+        progress_current=job.progress_current,
+        progress_total=job.progress_total,
         logs=_job_logs(db, job.id),
         sources=sources,
     )
 
 
-def build_analysis_status(
-    db: Session,
-    monitor_date: date,
-    job_id: int | None = None,
-) -> AnalysisStatusResponse:
-    reconcile_stale_jobs(db, JobKind.ANALYSIS)
-    job = get_job(db, job_id, monitor_date, JobKind.ANALYSIS)
-    if not job:
-        return AnalysisStatusResponse(
-            monitor_date=monitor_date,
-            running=False,
-            job_id=None,
-            job_status="PENDING",
-            phase=None,
-            phase_message=None,
-            error=None,
-            finished_at=None,
-            progress_current=None,
-            progress_total=None,
-            analysis_summary=None,
-            logs=[],
+def list_snapshots(db: Session) -> list[SnapshotSummary]:
+    rows = (
+        db.query(ErpSyncJob)
+        .filter(
+            ErpSyncJob.job_kind == JobKind.PIPELINE,
+            ErpSyncJob.status == IngestionStatus.SUCCESS,
         )
-
-    return AnalysisStatusResponse(
-        monitor_date=monitor_date,
-        running=job.status == IngestionStatus.RUNNING,
-        job_id=job.id,
-        job_status=job.status.value,
-        phase=job.phase.value,
-        phase_message=job.phase_message,
-        error=job.error_message,
-        finished_at=job.finished_at,
-        progress_current=job.progress_current,
-        progress_total=job.progress_total,
-        analysis_summary=job.analysis_summary,
-        logs=_job_logs(db, job.id),
+        .order_by(ErpSyncJob.finished_at.desc(), ErpSyncJob.id.desc())
+        .all()
     )
+    return [
+        SnapshotSummary(
+            id=job.id,
+            monitor_date=job.monitor_date,
+            finished_at=job.finished_at,
+            sync_summary=job.sync_summary,
+            analysis_summary=job.analysis_summary,
+        )
+        for job in rows
+    ]
 
 
-def build_sync_latest(db: Session, monitor_date: date) -> ErpSyncLatestResponse:
-    job = get_latest_successful_sync(db, monitor_date)
-    if not job:
-        return ErpSyncLatestResponse(monitor_date=monitor_date, has_sync=False)
-    return ErpSyncLatestResponse(
-        monitor_date=monitor_date,
-        has_sync=True,
-        job_id=job.id,
-        finished_at=job.finished_at,
-        sync_summary=job.sync_summary,
+def to_pipeline_accepted(job: ErpSyncJob) -> PipelineAccepted:
+    return PipelineAccepted(
+        snapshot_id=job.id,
+        monitor_date=job.monitor_date,
+        message="同步并分析已启动",
     )

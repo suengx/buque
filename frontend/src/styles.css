@@ -872,6 +872,7 @@ a {
 }
 
 .buque-monitor-date {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -923,6 +924,72 @@ a {
 .buque-monitor-date-input::-webkit-calendar-picker-indicator {
   cursor: pointer;
   opacity: 0.55;
+}
+
+.buque-snapshot-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.buque-snapshot-value {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  color: var(--sea-ink-soft);
+}
+
+.buque-snapshot-menu {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  z-index: 50;
+  min-width: 16rem;
+  max-width: 20rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 0.625rem;
+  background: var(--surface-card);
+  box-shadow: 0 8px 24px rgba(38, 37, 30, 0.08);
+  padding: 0.25rem;
+}
+
+.buque-snapshot-empty {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--sea-ink-soft);
+}
+
+.buque-snapshot-option {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0.4375rem;
+  background: transparent;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--sea-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.buque-snapshot-option:hover {
+  background: color-mix(in oklab, var(--aqua) 8%, transparent);
+}
+
+.buque-snapshot-option-active {
+  background: color-mix(in oklab, var(--aqua) 14%, transparent);
+  font-weight: 600;
 }
 
 .buque-ops-hub {
@@ -1285,6 +1352,48 @@ a {
   justify-content: space-between;
   gap: 0.75rem 1rem;
   margin-bottom: 0.75rem;
+}
+
+.buque-trend-panel-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.buque-trend-compare {
+  display: inline-flex;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 0.125rem;
+  background: color-mix(in oklab, var(--surface-card) 88%, var(--bg-canvas) 12%);
+}
+
+.buque-trend-compare-btn {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--sea-ink-soft);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.buque-trend-compare-btn:hover:not(:disabled) {
+  color: var(--sea-ink);
+}
+
+.buque-trend-compare-btn-active {
+  background: var(--surface-card);
+  color: var(--sea-ink);
+  box-shadow: 0 1px 2px rgba(38, 37, 30, 0.06);
+}
+
+.buque-trend-compare-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .buque-trend-deltas {

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { api, queryKeys } from '#/lib/api'
 import { riskTypeLabel } from '#/lib/labels'
+import { useSnapshot } from '#/context/SnapshotContext'
 import { MetricCard } from '#/components/buque/MetricCard'
 import { PageHeader } from '#/components/buque/PageHeader'
 
@@ -21,6 +22,7 @@ export const Route = createFileRoute('/feedback/')({
 
 function FeedbackPage() {
   const search = Route.useSearch()
+  const { selectedSnapshotId } = useSnapshot()
   const qc = useQueryClient()
   const { data: stats } = useQuery({
     queryKey: queryKeys.feedbackStats,
@@ -44,6 +46,7 @@ function FeedbackPage() {
         risk_type: riskType,
         decision,
         remark,
+        snapshot_id: selectedSnapshotId,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.feedbackStats })

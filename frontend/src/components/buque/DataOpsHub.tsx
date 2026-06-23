@@ -1,8 +1,8 @@
 import { ChevronDown, Database, RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useMonitorDate } from '#/context/MonitorDateContext'
-import { useDataOps } from '#/hooks/useDataOps'
-import type { ErpSyncLatestResponse, OpsStatusResponse } from '#/lib/api'
+import { useSnapshot } from '#/context/SnapshotContext'
+import { usePipeline } from '#/hooks/usePipeline'
+import type { SnapshotSummary } from '#/lib/api'
 import { cn } from '#/lib/utils'
 
 const TZ = 'Asia/Shanghai'
@@ -37,50 +37,33 @@ function formatNextRun(iso: string) {
   return formatShanghai(iso)
 }
 
-function formatSyncCounts(latest: ErpSyncLatestResponse | undefined) {
-  if (!latest?.has_sync || !latest.sync_summary) return null
+function formatSyncCounts(latest: SnapshotSummary | undefined) {
+  if (!latest?.sync_summary) return null
   const counts = latest.sync_summary.ingestion_counts as Record<string, number> | undefined
   if (!counts) return null
   return `库存 ${counts.inventory ?? 0} / 订单 ${counts.orders ?? 0} / TMS ${counts.inbound ?? 0} 行`
 }
 
-function pipelineStatusLabel(ops: OpsStatusResponse | undefined, active: boolean) {
-  if (!active) return '空闲'
-  if (ops?.sync_running && ops?.analysis_running) return '同步与分析中'
-  if (ops?.sync_running) return '同步中'
-  if (ops?.analysis_running) return '分析中'
-  return '执行中'
-}
-
 function triggerSubtext(
-  ops: OpsStatusResponse | undefined,
+  latest: SnapshotSummary | undefined,
   active: boolean,
   statusHint: string | null,
 ) {
   if (active) {
     if (statusHint) return statusHint
-    return pipelineStatusLabel(ops, true)
+    return '同步并分析中'
   }
-  const latest = ops?.latest_sync
-  if (latest?.has_sync && latest.finished_at) {
+  if (latest?.finished_at) {
     return `上次 ${formatShanghai(latest.finished_at)}`
   }
-  return '暂无同步记录'
+  return '暂无流水线记录'
 }
 
 export function DataOpsHub({ embedded = false }: { embedded?: boolean }) {
-  const { monitorDate } = useMonitorDate()
+  const { selectedSnapshot, snapshots } = useSnapshot()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
-  const {
-    opsStatus,
-    syncBusy,
-    analysisBusy,
-    pipelineActive,
-    statusHint,
-    startSync,
-    startAnalysis,
-  } = useDataOps(monitorDate)
+  const { opsStatus, pipelineBusy, statusHint, startPipeline } = usePipeline()
 
   useEffect(() => {
     if (!open) return
@@ -93,9 +76,10 @@ export function DataOpsHub({ embedded = false }: { embedded?: boolean }) {
     return () => document.removeEventListener('mousedown', onPointerDown)
   }, [open])
 
-  const counts = formatSyncCounts(opsStatus?.latest_sync)
-  const subtext = triggerSubtext(opsStatus, pipelineActive, statusHint)
-  const statusLabel = pipelineStatusLabel(opsStatus, pipelineActive)
+  const latest = selectedSnapshot ?? snapshots[0]
+  const counts = formatSyncCounts(latest)
+  const subtext = triggerSubtext(latest, pipelineBusy, statusHint)
+  const statusLabel = pipelineBusy ? '执行中' : '空闲'
 
   return (
     <div ref={rootRef} className={cn('buque-ops-hub', embedded && 'buque-ops-hub-embedded')}>
@@ -104,13 +88,13 @@ export function DataOpsHub({ embedded = false }: { embedded?: boolean }) {
         className={cn(
           'buque-ops-trigger',
           embedded && 'buque-ops-trigger-embedded',
-          pipelineActive && 'buque-ops-trigger-active',
+          pipelineBusy && 'buque-ops-trigger-active',
         )}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={cn('buque-ops-icon-wrap', pipelineActive && 'buque-ops-wave')}>
-          {pipelineActive ? (
+        <span className={cn('buque-ops-icon-wrap', pipelineBusy && 'buque-ops-wave')}>
+          {pipelineBusy ? (
             <RefreshCw size={14} className="buque-ops-icon-spin" />
           ) : (
             <Database size={14} />
@@ -131,12 +115,12 @@ export function DataOpsHub({ embedded = false }: { embedded?: boolean }) {
               <span
                 className={cn(
                   'buque-ops-dot',
-                  pipelineActive ? 'buque-ops-dot-active' : 'buque-ops-dot-idle',
+                  pipelineBusy ? 'buque-ops-dot-active' : 'buque-ops-dot-idle',
                 )}
               />
               <div className="min-w-0">
                 <p className="buque-ops-status-main">{statusLabel}</p>
-                {pipelineActive && statusHint ? (
+                {pipelineBusy && statusHint ? (
                   <p className="buque-ops-status-sub">{statusHint}</p>
                 ) : (
                   <p className="buque-ops-status-sub">当前无后台任务运行</p>
@@ -161,39 +145,27 @@ export function DataOpsHub({ embedded = false }: { embedded?: boolean }) {
           </section>
 
           <section className="buque-ops-section">
-            <h3 className="buque-ops-section-title">最近同步</h3>
-            {opsStatus?.latest_sync?.has_sync ? (
+            <h3 className="buque-ops-section-title">最近快照</h3>
+            {latest?.finished_at ? (
               <>
-                <p className="buque-ops-line">
-                  完成于{' '}
-                  {opsStatus.latest_sync.finished_at
-                    ? formatShanghai(opsStatus.latest_sync.finished_at)
-                    : '—'}
-                </p>
+                <p className="buque-ops-line">完成于 {formatShanghai(latest.finished_at)}</p>
+                <p className="buque-ops-line-muted">业务日 {latest.monitor_date}</p>
                 {counts ? <p className="buque-ops-line-muted">{counts}</p> : null}
               </>
             ) : (
-              <p className="buque-ops-line-muted">暂无成功同步记录</p>
+              <p className="buque-ops-line-muted">暂无成功快照</p>
             )}
           </section>
 
           <div className="buque-ops-actions">
             <button
               type="button"
-              className="demo-button demo-button-sm flex-1"
-              disabled={syncBusy || !opsStatus?.erp_configured}
-              onClick={startSync}
+              className="demo-button demo-button-sm w-full"
+              disabled={pipelineBusy || !opsStatus?.erp_configured}
+              onClick={() => startPipeline()}
               title={opsStatus?.erp_configured ? undefined : 'ERP 未配置'}
             >
-              {syncBusy ? '同步中…' : '开始同步'}
-            </button>
-            <button
-              type="button"
-              className="demo-button demo-button-secondary demo-button-sm flex-1"
-              disabled={analysisBusy}
-              onClick={startAnalysis}
-            >
-              {analysisBusy ? '分析中…' : '运行分析'}
+              {pipelineBusy ? '同步并分析中…' : '同步并分析'}
             </button>
           </div>
         </div>

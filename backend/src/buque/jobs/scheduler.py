@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 
 from buque.config import get_settings
 from buque.db import SessionLocal
-from buque.services.monitor_pipeline import run_analysis_pipeline
+from buque.services.erp_sync_job import create_pipeline_job
 from buque.services.schedule_config import daily_pipeline_trigger, schedule_label
-from buque.services.sync_pipeline import run_sync_ingestion
+from buque.services.sync_pipeline import run_pipeline_job
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -29,9 +29,9 @@ def run_daily_pipeline(monitor_date: date | None = None, use_fixtures: bool = Fa
             logger.warning("ERP 未配置，跳过抓取")
             return
 
-        run_sync_ingestion(db, md, ingestion=ingestion)
-        run_analysis_pipeline(db, md)
-        logger.info("日批完成: %s", md.isoformat())
+        job = create_pipeline_job(db, md)
+        run_pipeline_job(db, md, job.id, ingestion=ingestion)
+        logger.info("日批完成: %s snapshot=%s", md.isoformat(), job.id)
     finally:
         db.close()
 

@@ -90,6 +90,7 @@ def _ingest_safe(
 def run_ingestion_from_files(
     db: Session,
     monitor_date: date,
+    snapshot_id: int,
     inventory_file: Path | None = None,
     orders_file: Path | None = None,
     inbound_file: Path | None = None,
@@ -102,7 +103,7 @@ def run_ingestion_from_files(
             _ingest_safe(
                 db,
                 "erp_inventory",
-                lambda: InventoryParser(db, monitor_date).ingest_file(inventory_file),
+                lambda: InventoryParser(db, monitor_date, snapshot_id).ingest_file(inventory_file),
             )
         )
     if orders_file and orders_file.exists():
@@ -110,7 +111,7 @@ def run_ingestion_from_files(
             _ingest_safe(
                 db,
                 "erp_orders",
-                lambda: OrdersParser(db, monitor_date).ingest_file(orders_file),
+                lambda: OrdersParser(db, monitor_date, snapshot_id).ingest_file(orders_file),
             )
         )
     if inbound_file and inbound_file.exists():
@@ -118,7 +119,9 @@ def run_ingestion_from_files(
             _ingest_safe(
                 db,
                 "tms_inbound",
-                lambda: InboundParser(db, monitor_date, rule_config).ingest_file(inbound_file),
+                lambda: InboundParser(db, monitor_date, snapshot_id, rule_config).ingest_file(
+                    inbound_file
+                ),
             )
         )
     return result
@@ -143,6 +146,7 @@ def _attach_transport_meta(result: ErpSyncResult, metas: dict) -> None:
 def run_ingestion_from_erp(
     db: Session,
     monitor_date: date,
+    snapshot_id: int,
     on_phase: PhaseCallback | None = None,
 ) -> ErpSyncResult:
     def report(phase: ErpSyncPhase, message: str) -> None:
@@ -165,6 +169,7 @@ def run_ingestion_from_erp(
     result = run_ingestion_from_files(
         db,
         monitor_date,
+        snapshot_id,
         inventory_file=inventory_path,
         orders_file=orders_path,
         inbound_file=inbound_path,

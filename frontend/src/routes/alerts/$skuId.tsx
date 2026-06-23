@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, MessageSquarePlus } from 'lucide-react'
 import { api, queryKeys } from '#/lib/api'
 import { riskTypeLabel } from '#/lib/labels'
+import { useSnapshot } from '#/context/SnapshotContext'
 import { GlassCard, RiskBadge } from '#/components/buque/RiskBadge'
 import { PageHeader } from '#/components/buque/PageHeader'
 
@@ -20,20 +21,24 @@ function formatMetrics(metrics: Record<string, unknown>) {
 function SkuDetailPage() {
   const { skuId } = Route.useParams()
   const { warehouse } = Route.useSearch()
+  const { selectedSnapshotId } = useSnapshot()
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.skuDetail(skuId, warehouse),
-    queryFn: () => api.skuDetail(skuId, warehouse),
+    queryKey: queryKeys.skuDetail(skuId, selectedSnapshotId, warehouse),
+    queryFn: () => api.skuDetail(skuId, { warehouse, snapshotId: selectedSnapshotId }),
+    enabled: selectedSnapshotId !== undefined,
   })
 
   const agentExplain = useMutation({
     mutationFn: () =>
       api.agentExplainSku(skuId, {
         warehouse,
-        monitorDate: data?.monitor_date,
+        snapshotId: selectedSnapshotId,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.skuDetail(skuId, warehouse) })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.skuDetail(skuId, selectedSnapshotId, warehouse),
+      })
     },
   })
 
@@ -149,7 +154,7 @@ function SkuDetailPage() {
                 <dd>{(explain?.require_human_confirm ?? data.require_human_confirm) ? '是' : '否'}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="demo-muted">监控日期</dt>
+                <dt className="demo-muted">业务日</dt>
                 <dd>{data.monitor_date}</dd>
               </div>
             </dl>

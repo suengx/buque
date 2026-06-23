@@ -14,11 +14,34 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+function snapshotQuery(snapshotId?: number) {
+  return snapshotId ? `?snapshot_id=${snapshotId}` : ''
+}
+
+export type SnapshotSummary = {
+  id: number
+  monitor_date: string
+  finished_at: string | null
+  sync_summary: Record<string, unknown> | null
+  analysis_summary: Record<string, number> | null
+}
+
+export type TrendComparison = {
+  new_red_count: number
+  new_orange_count: number
+  baseline_label: string | null
+  baseline_snapshot_id: number | null
+  available: boolean
+}
+
 export type DailyReportSummary = {
+  snapshot_id: number
   monitor_date: string
   monitored_sku_count: number
   new_red_count: number
   new_orange_count: number
+  comparison_vs_prev_day: TrendComparison
+  comparison_vs_prev_snapshot: TrendComparison
   stockout_high_risk_count: number
   slow_moving_high_risk_count: number
   sales_anomaly_count: number
@@ -51,6 +74,7 @@ export type PaginatedAlerts = {
 }
 
 export type SkuDetail = {
+  snapshot_id: number
   monitor_date: string
   sku: string
   product_name: string | null
@@ -100,70 +124,41 @@ export type IngestionSourceStatus = {
   ingestion_run_id: number | null
 }
 
-export type ErpSyncStatusResponse = {
+export type PipelineStatusResponse = {
+  snapshot_id: number | null
   monitor_date: string
   running: boolean
-  job_id: number | null
   job_status: string
   phase: string | null
   phase_message: string | null
   error: string | null
   finished_at: string | null
   sync_summary: Record<string, unknown> | null
+  analysis_summary: Record<string, number> | null
+  progress_current: number | null
+  progress_total: number | null
   logs: { level: string; message: string; created_at: string }[]
   sources: IngestionSourceStatus[]
 }
 
-export type ErpSyncLatestResponse = {
+export type PipelineAccepted = {
+  snapshot_id: number
   monitor_date: string
-  has_sync: boolean
-  job_id: number | null
-  finished_at: string | null
-  sync_summary: Record<string, unknown> | null
+  message: string
 }
 
 export type OpsStatusResponse = {
-  monitor_date: string
   timezone: string
   schedule_label: string
   next_scheduled_at: string
   pipeline_active: boolean
-  sync_running: boolean
-  analysis_running: boolean
-  sync_phase_message: string | null
-  analysis_phase_message: string | null
-  erp_configured: boolean
-  latest_sync: ErpSyncLatestResponse
-}
-
-export type AnalysisStatusResponse = {
-  monitor_date: string
-  running: boolean
-  job_id: number | null
-  job_status: string
-  phase: string | null
+  running_snapshot_id: number | null
   phase_message: string | null
-  error: string | null
-  finished_at: string | null
-  progress_current: number | null
-  progress_total: number | null
-  analysis_summary: Record<string, number> | null
-  logs: { level: string; message: string; created_at: string }[]
-}
-
-export type AnalysisAccepted = {
-  monitor_date: string
-  job_id: number
-  message: string
-}
-
-export type ErpSyncAccepted = {
-  monitor_date: string
-  job_id: number
-  message: string
+  erp_configured: boolean
 }
 
 export type ReportAnalytics = {
+  snapshot_id: number
   monitor_date: string
   level_counts: Record<string, number>
   type_counts: Record<string, number>
@@ -172,12 +167,14 @@ export type ReportAnalytics = {
 }
 
 export type AlertsMeta = {
+  snapshot_id: number
   monitor_date: string
   warehouses: string[]
   type_counts: Record<string, number>
 }
 
 export type PipelineRunResult = {
+  snapshot_id: number
   monitor_date: string
   ingestion: Record<string, number>
   quality_issues: number
@@ -187,25 +184,28 @@ export type PipelineRunResult = {
 }
 
 export const api = {
-  dailyReport: (date?: string) =>
-    request<DailyReportSummary>(`/reports/daily${date ? `?monitor_date=${date}` : ''}`),
-  reportAnalytics: (date?: string) =>
-    request<ReportAnalytics>(`/reports/analytics${date ? `?monitor_date=${date}` : ''}`),
-  alertsMeta: (date?: string) =>
-    request<AlertsMeta>(`/alerts/meta${date ? `?monitor_date=${date}` : ''}`),
+  dailyReport: (snapshotId?: number) =>
+    request<DailyReportSummary>(`/reports/daily${snapshotQuery(snapshotId)}`),
+  reportAnalytics: (snapshotId?: number) =>
+    request<ReportAnalytics>(`/reports/analytics${snapshotQuery(snapshotId)}`),
+  alertsMeta: (snapshotId?: number) =>
+    request<AlertsMeta>(`/alerts/meta${snapshotQuery(snapshotId)}`),
   alerts: (params: Record<string, string | number>) => {
     const q = new URLSearchParams()
     Object.entries(params).forEach(([k, v]) => q.set(k, String(v)))
     return request<PaginatedAlerts>(`/alerts?${q}`)
   },
-  skuDetail: (sku: string, warehouse?: string) =>
-    request<SkuDetail>(
-      `/alerts/${sku}${warehouse ? `?warehouse=${encodeURIComponent(warehouse)}` : ''}`,
-    ),
-  agentExplainSku: (sku: string, opts?: { warehouse?: string; monitorDate?: string }) => {
+  skuDetail: (sku: string, opts?: { warehouse?: string; snapshotId?: number }) => {
     const q = new URLSearchParams()
     if (opts?.warehouse) q.set('warehouse', opts.warehouse)
-    if (opts?.monitorDate) q.set('monitor_date', opts.monitorDate)
+    if (opts?.snapshotId) q.set('snapshot_id', String(opts.snapshotId))
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<SkuDetail>(`/alerts/${sku}${suffix}`)
+  },
+  agentExplainSku: (sku: string, opts?: { warehouse?: string; snapshotId?: number }) => {
+    const q = new URLSearchParams()
+    if (opts?.warehouse) q.set('warehouse', opts.warehouse)
+    if (opts?.snapshotId) q.set('snapshot_id', String(opts.snapshotId))
     const suffix = q.toString() ? `?${q}` : ''
     return request<AgentExplainResult>(`/alerts/${encodeURIComponent(sku)}/agent-explain${suffix}`, {
       method: 'POST',
@@ -214,40 +214,17 @@ export const api = {
   createFeedback: (body: Record<string, unknown>) =>
     request('/feedback', { method: 'POST', body: JSON.stringify(body) }),
   feedbackStats: () => request<FeedbackStats>('/feedback/stats'),
-  startErpSync: (opts: { monitorDate?: string }) =>
-    request<ErpSyncAccepted>('/admin/sync/erp', {
-      method: 'POST',
-      body: JSON.stringify({
-        monitor_date: opts.monitorDate,
-      }),
-    }),
-  getErpSyncStatus: (monitorDate?: string, jobId?: number) => {
-    const q = new URLSearchParams()
-    if (monitorDate) q.set('monitor_date', monitorDate)
-    if (jobId !== undefined) q.set('job_id', String(jobId))
-    const suffix = q.toString() ? `?${q}` : ''
-    return request<ErpSyncStatusResponse>(`/admin/sync/status${suffix}`)
-  },
-  getErpSyncLatest: (monitorDate?: string) => {
-    const q = monitorDate ? `?monitor_date=${monitorDate}` : ''
-    return request<ErpSyncLatestResponse>(`/admin/sync/latest${q}`)
-  },
-  getOpsStatus: (monitorDate?: string) => {
-    const q = monitorDate ? `?monitor_date=${monitorDate}` : ''
-    return request<OpsStatusResponse>(`/admin/ops/status${q}`)
-  },
-  startAnalysis: (opts: { monitorDate?: string }) =>
-    request<AnalysisAccepted>('/admin/analyze', {
+  listSnapshots: () => request<SnapshotSummary[]>('/admin/snapshots'),
+  startPipeline: (opts: { monitorDate?: string }) =>
+    request<PipelineAccepted>('/admin/pipeline/start', {
       method: 'POST',
       body: JSON.stringify({ monitor_date: opts.monitorDate }),
     }),
-  getAnalysisStatus: (monitorDate?: string, jobId?: number) => {
-    const q = new URLSearchParams()
-    if (monitorDate) q.set('monitor_date', monitorDate)
-    if (jobId !== undefined) q.set('job_id', String(jobId))
-    const suffix = q.toString() ? `?${q}` : ''
-    return request<AnalysisStatusResponse>(`/admin/analyze/status${suffix}`)
+  getPipelineStatus: (jobId?: number) => {
+    const q = jobId !== undefined ? `?job_id=${jobId}` : ''
+    return request<PipelineStatusResponse>(`/admin/pipeline/status${q}`)
   },
+  getOpsStatus: () => request<OpsStatusResponse>('/admin/ops/status'),
   runPipeline: (opts: { monitorDate?: string; ingestionSource?: 'fixtures' | 'erp' }) => {
     const q = new URLSearchParams()
     if (opts.monitorDate) q.set('monitor_date', opts.monitorDate)
@@ -257,11 +234,13 @@ export const api = {
 }
 
 export const queryKeys = {
-  dailyReport: (date?: string) => ['dailyReport', date] as const,
-  reportAnalytics: (date?: string) => ['reportAnalytics', date] as const,
-  alertsMeta: (date?: string) => ['alertsMeta', date] as const,
+  snapshots: ['snapshots'] as const,
+  dailyReport: (snapshotId?: number) => ['dailyReport', snapshotId] as const,
+  reportAnalytics: (snapshotId?: number) => ['reportAnalytics', snapshotId] as const,
+  alertsMeta: (snapshotId?: number) => ['alertsMeta', snapshotId] as const,
   alerts: (params: Record<string, string | number>) => ['alerts', params] as const,
-  skuDetail: (sku: string, warehouse?: string) => ['skuDetail', sku, warehouse] as const,
+  skuDetail: (sku: string, snapshotId?: number, warehouse?: string) =>
+    ['skuDetail', sku, snapshotId, warehouse] as const,
   feedbackStats: ['feedbackStats'] as const,
-  opsStatus: (date?: string) => ['opsStatus', date] as const,
+  opsStatus: ['opsStatus'] as const,
 }
