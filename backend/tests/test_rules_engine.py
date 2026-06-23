@@ -1,7 +1,12 @@
+from datetime import date
 from decimal import Decimal
 
-from buque.rules.engine import _upgrade
-from buque.models.entities import RiskLevel
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from buque.models.entities import DimSku, FactInventoryDaily, MonitoringScope, RiskLevel, RiskType
+from buque.rules.engine import RuleEngine, _upgrade, _valid_sales
 
 
 def test_upgrade_level() -> None:
@@ -14,3 +19,42 @@ def test_dos_calculation() -> None:
     ref_daily = Decimal("8")
     dos = Decimal(available) / ref_daily
     assert dos == Decimal("3.125")
+
+
+def test_valid_sales_rejects_nan() -> None:
+    assert not _valid_sales(Decimal("NaN"))
+    assert not _valid_sales(None)
+    assert _valid_sales(Decimal("1.5"))
+
+
+@pytest.fixture
+def db_session() -> Session:
+    engine = create_engine("sqlite:///:memory:")
+    for table in (DimSku.__table__, FactInventoryDaily.__table__):
+        table.create(engine, checkfirst=True)
+    factory = sessionmaker(bind=engine)
+    session = factory()
+    session.add(DimSku(sku="NAN-SKU", product_name="Test"))
+    session.add(
+        FactInventoryDaily(
+            date=date(2026, 6, 22),
+            sku="NAN-SKU",
+            warehouse="WH1",
+            available_inventory=10,
+            ref_daily_sales=Decimal("NaN"),
+        )
+    )
+    session.commit()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+def test_rule_engine_handles_nan_ref_daily_sales(db_session: Session) -> None:
+    findings = RuleEngine(db_session, date(2026, 6, 22))._evaluate_warehouse_scope()
+    anomaly = [f for f in findings if f.trigger_rule == "MISSING_DATA_BLOCK"]
+    assert len(anomaly) == 1
+    assert anomaly[0].risk_type == RiskType.DATA_ANOMALY
+    assert anomaly[0].scope == MonitoringScope.WAREHOUSE
+    assert anomaly[0].requires_explanation is False

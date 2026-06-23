@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from buque.models.entities import DataQualityIssue, DimMskuMapping, FactInventoryDaily, FactSalesDaily
+from buque.rules.engine import _valid_sales
 
 
 class DataQualityChecker:
@@ -94,7 +95,7 @@ class DataQualityChecker:
             .all()
         )
         for row in rows:
-            if row.ref_daily_sales is None:
+            if not _valid_sales(row.ref_daily_sales):
                 self._add(
                     "MISSING_REF_SALES",
                     "缺少7天日均(ref_daily_sales)",

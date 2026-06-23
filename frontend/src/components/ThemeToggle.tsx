@@ -1,38 +1,8 @@
 import { useEffect, useState } from 'react'
-
-type ThemeMode = 'light' | 'dark' | 'auto'
-
-function getInitialMode(): ThemeMode {
-  if (typeof window === 'undefined') {
-    return 'auto'
-  }
-
-  const stored = window.localStorage.getItem('theme')
-  if (stored === 'light' || stored === 'dark' || stored === 'auto') {
-    return stored
-  }
-
-  return 'auto'
-}
-
-function applyThemeMode(mode: ThemeMode) {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-  const resolved = mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode
-
-  document.documentElement.classList.remove('light', 'dark')
-  document.documentElement.classList.add(resolved)
-
-  if (mode === 'auto') {
-    document.documentElement.removeAttribute('data-theme')
-  } else {
-    document.documentElement.setAttribute('data-theme', mode)
-  }
-
-  document.documentElement.style.colorScheme = resolved
-}
+import { applyThemeMode, getInitialMode, type ThemeMode } from '#/lib/theme'
 
 export default function ThemeToggle() {
-  const [mode, setMode] = useState<ThemeMode>('auto')
+  const [mode, setMode] = useState<ThemeMode>('light')
 
   useEffect(() => {
     const initialMode = getInitialMode()
@@ -64,8 +34,10 @@ export default function ThemeToggle() {
 
   const label =
     mode === 'auto'
-      ? 'Theme mode: auto (system). Click to switch to light mode.'
-      : `Theme mode: ${mode}. Click to switch mode.`
+      ? '主题：跟随系统。点击切换为浅色。'
+      : mode === 'dark'
+        ? '主题：深色。点击切换为自动。'
+        : '主题：浅色。点击切换为深色。'
 
   return (
     <button
@@ -73,9 +45,9 @@ export default function ThemeToggle() {
       onClick={toggleMode}
       aria-label={label}
       title={label}
-      className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-sm font-semibold text-[var(--sea-ink)] shadow-[0_8px_22px_rgba(30,90,72,0.08)] transition hover:-translate-y-0.5"
+      className="demo-button-secondary w-full"
     >
-      {mode === 'auto' ? 'Auto' : mode === 'dark' ? 'Dark' : 'Light'}
+      {mode === 'auto' ? '主题：自动' : mode === 'dark' ? '主题：深色' : '主题：浅色'}
     </button>
   )
 }

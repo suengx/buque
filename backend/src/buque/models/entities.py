@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -268,6 +269,54 @@ class IngestionRun(Base):
     file_hash: Mapped[str | None] = mapped_column(String(64))
     file_path: Mapped[str | None] = mapped_column(String(512))
     error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class ErpSyncPhase(str, enum.Enum):
+    EXPORTING = "EXPORTING"
+    INGESTING = "INGESTING"
+    QUALITY = "QUALITY"
+    RULES = "RULES"
+    EVENTS = "EVENTS"
+    EXPLAIN = "EXPLAIN"
+    DONE = "DONE"
+
+
+class JobKind(str, enum.Enum):
+    SYNC = "SYNC"
+    ANALYSIS = "ANALYSIS"
+
+
+class ErpSyncJob(Base):
+    __tablename__ = "erp_sync_job"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    monitor_date: Mapped[date] = mapped_column(Date, index=True)
+    job_kind: Mapped[JobKind] = mapped_column(Enum(JobKind), default=JobKind.SYNC)
+    phase: Mapped[ErpSyncPhase] = mapped_column(
+        Enum(ErpSyncPhase, native_enum=False, length=32),
+        default=ErpSyncPhase.EXPORTING,
+    )
+    status: Mapped[IngestionStatus] = mapped_column(
+        Enum(IngestionStatus), default=IngestionStatus.RUNNING
+    )
+    phase_message: Mapped[str | None] = mapped_column(String(255))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    sync_summary: Mapped[dict | None] = mapped_column(JSON)
+    analysis_summary: Mapped[dict | None] = mapped_column(JSON)
+    progress_current: Mapped[int | None] = mapped_column(Integer)
+    progress_total: Mapped[int | None] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ErpSyncLog(Base):
+    __tablename__ = "erp_sync_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
+    level: Mapped[str] = mapped_column(String(16), default="INFO")
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DataQualityIssue(Base):

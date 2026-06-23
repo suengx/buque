@@ -28,7 +28,19 @@ class Settings(BaseSettings):
 
     data_dir: str = "data"
     export_dir: str = "data/exports"
-    erp_sync_timeout_ms: int = 600_000
+    # 传输中心轮询上限（实测 job#13：库存 ~34s、订单 ~3min、全程 ~4min）
+    erp_sync_timeout_ms: int = 240_000  # 库存导出，4min
+    erp_orders_export_timeout_ms: int = 360_000  # 订单导出，6min
+    erp_job_stale_buffer_seconds: int = 90  # TMS 抓取 + 落库
+
+    @property
+    def erp_job_stale_seconds(self) -> int:
+        """同步 job 最大存活时间：库存导出 + 订单导出 + 缓冲。"""
+        return (
+            self.erp_sync_timeout_ms // 1000
+            + self.erp_orders_export_timeout_ms // 1000
+            + self.erp_job_stale_buffer_seconds
+        )
 
     @property
     def tz(self) -> ZoneInfo:

@@ -1,77 +1,135 @@
 
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
-  --sea-ink: #173a40;
-  --sea-ink-soft: #416166;
-  --lagoon: #4fb8b2;
-  --lagoon-deep: #328f97;
-  --palm: #2f6a4a;
-  --sand: #e7f0e8;
-  --foam: #f3faf5;
-  --surface: rgba(255, 255, 255, 0.74);
-  --surface-strong: rgba(255, 255, 255, 0.9);
-  --line: rgba(23, 58, 64, 0.14);
-  --inset-glint: rgba(255, 255, 255, 0.82);
-  --kicker: rgba(47, 106, 74, 0.9);
-  --bg-base: #e7f3ec;
-  --header-bg: rgba(251, 255, 248, 0.84);
-  --chip-bg: rgba(255, 255, 255, 0.8);
-  --chip-line: rgba(47, 106, 74, 0.18);
-  --link-bg-hover: rgba(255, 255, 255, 0.9);
-  --hero-a: rgba(79, 184, 178, 0.36);
-  --hero-b: rgba(47, 106, 74, 0.2);
+  --primary-teal: #0b3d3a;
+  --aqua: #0fa58a;
+  --deep-slate: #17262b;
+  --slate: #45515a;
+  --glass: #e6eef0;
+  --amber: #ffb321;
+
+  --sea-ink: var(--primary-teal);
+  --sea-ink-soft: var(--slate);
+  --lagoon: var(--aqua);
+  --lagoon-deep: #0d8a74;
+  --palm: var(--primary-teal);
+  --sand: var(--glass);
+  --foam: #f4f7f8;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-strong: rgba(255, 255, 255, 0.94);
+  --line: rgba(11, 61, 58, 0.12);
+  --inset-glint: rgba(255, 255, 255, 0.9);
+  --kicker: rgba(15, 165, 138, 0.92);
+  --bg-base: #edf2f3;
+  --header-bg: rgba(255, 255, 255, 0.88);
+  --chip-bg: rgba(255, 255, 255, 0.92);
+  --chip-line: rgba(11, 61, 58, 0.14);
+  --link-bg-hover: rgba(255, 255, 255, 0.96);
+  --hero-a: rgba(15, 165, 138, 0.14);
+  --hero-b: rgba(11, 61, 58, 0.08);
+
+  --status-success: #0d8a5b;
+  --status-warning: #b45309;
+  --status-danger: #c44747;
+
+  --risk-red-bg: rgba(196, 71, 71, 0.14);
+  --risk-red-text: #9f3030;
+  --risk-red-border: rgba(196, 71, 71, 0.35);
+  --risk-orange-bg: rgba(255, 179, 33, 0.18);
+  --risk-orange-text: #9a5f00;
+  --risk-orange-border: rgba(255, 179, 33, 0.42);
+  --risk-yellow-bg: rgba(234, 179, 8, 0.16);
+  --risk-yellow-text: #854d0e;
+  --risk-yellow-border: rgba(234, 179, 8, 0.38);
+  --risk-green-bg: rgba(15, 165, 138, 0.14);
+  --risk-green-text: #0d6b58;
+  --risk-green-border: rgba(15, 165, 138, 0.35);
 }
 
 :root[data-theme="dark"] {
-  --sea-ink: #d7ece8;
-  --sea-ink-soft: #afcdc8;
-  --lagoon: #60d7cf;
-  --lagoon-deep: #8de5db;
+  --sea-ink: #e8f2f0;
+  --sea-ink-soft: #a8bdb8;
+  --lagoon: #4fd4be;
+  --lagoon-deep: #7ee5d4;
   --palm: #6ec89a;
-  --sand: #0f1a1e;
-  --foam: #101d22;
-  --surface: rgba(16, 30, 34, 0.8);
-  --surface-strong: rgba(15, 27, 31, 0.92);
-  --line: rgba(141, 229, 219, 0.18);
-  --inset-glint: rgba(194, 247, 238, 0.14);
+  --sand: #121c20;
+  --foam: #0f181c;
+  --surface: rgba(23, 38, 43, 0.88);
+  --surface-strong: rgba(18, 28, 32, 0.96);
+  --line: rgba(127, 212, 196, 0.2);
+  --inset-glint: rgba(194, 247, 238, 0.08);
   --kicker: #b8efe5;
-  --bg-base: #0a1418;
-  --header-bg: rgba(10, 20, 24, 0.8);
-  --chip-bg: rgba(13, 28, 32, 0.9);
-  --chip-line: rgba(141, 229, 219, 0.24);
-  --link-bg-hover: rgba(24, 44, 49, 0.8);
-  --hero-a: rgba(96, 215, 207, 0.18);
-  --hero-b: rgba(110, 200, 154, 0.12);
+  --bg-base: #0a1215;
+  --header-bg: rgba(10, 18, 21, 0.92);
+  --chip-bg: rgba(23, 38, 43, 0.95);
+  --chip-line: rgba(127, 212, 196, 0.24);
+  --link-bg-hover: rgba(30, 48, 54, 0.9);
+  --hero-a: rgba(79, 212, 190, 0.12);
+  --hero-b: rgba(110, 200, 154, 0.08);
+
+  --status-success: #5fd9a8;
+  --status-warning: #f5b84a;
+  --status-danger: #f08080;
+
+  --risk-red-bg: rgba(240, 128, 128, 0.18);
+  --risk-red-text: #ffb4b4;
+  --risk-red-border: rgba(240, 128, 128, 0.4);
+  --risk-orange-bg: rgba(245, 184, 74, 0.18);
+  --risk-orange-text: #ffd08a;
+  --risk-orange-border: rgba(245, 184, 74, 0.42);
+  --risk-yellow-bg: rgba(250, 204, 21, 0.16);
+  --risk-yellow-text: #fde68a;
+  --risk-yellow-border: rgba(250, 204, 21, 0.38);
+  --risk-green-bg: rgba(95, 217, 168, 0.16);
+  --risk-green-text: #a7f3d0;
+  --risk-green-border: rgba(95, 217, 168, 0.38);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --sea-ink: #d7ece8;
-    --sea-ink-soft: #afcdc8;
-    --lagoon: #60d7cf;
-    --lagoon-deep: #8de5db;
+    --sea-ink: #e8f2f0;
+    --sea-ink-soft: #a8bdb8;
+    --lagoon: #4fd4be;
+    --lagoon-deep: #7ee5d4;
     --palm: #6ec89a;
-    --sand: #0f1a1e;
-    --foam: #101d22;
-    --surface: rgba(16, 30, 34, 0.8);
-    --surface-strong: rgba(15, 27, 31, 0.92);
-    --line: rgba(141, 229, 219, 0.18);
-    --inset-glint: rgba(194, 247, 238, 0.14);
+    --sand: #121c20;
+    --foam: #0f181c;
+    --surface: rgba(23, 38, 43, 0.88);
+    --surface-strong: rgba(18, 28, 32, 0.96);
+    --line: rgba(127, 212, 196, 0.2);
+    --inset-glint: rgba(194, 247, 238, 0.08);
     --kicker: #b8efe5;
-    --bg-base: #0a1418;
-    --header-bg: rgba(10, 20, 24, 0.8);
-    --chip-bg: rgba(13, 28, 32, 0.9);
-    --chip-line: rgba(141, 229, 219, 0.24);
-    --link-bg-hover: rgba(24, 44, 49, 0.8);
-    --hero-a: rgba(96, 215, 207, 0.18);
-    --hero-b: rgba(110, 200, 154, 0.12);
+    --bg-base: #0a1215;
+    --header-bg: rgba(10, 18, 21, 0.92);
+    --chip-bg: rgba(23, 38, 43, 0.95);
+    --chip-line: rgba(127, 212, 196, 0.24);
+    --link-bg-hover: rgba(30, 48, 54, 0.9);
+    --hero-a: rgba(79, 212, 190, 0.12);
+    --hero-b: rgba(110, 200, 154, 0.08);
+
+    --status-success: #5fd9a8;
+    --status-warning: #f5b84a;
+    --status-danger: #f08080;
+
+    --risk-red-bg: rgba(240, 128, 128, 0.18);
+    --risk-red-text: #ffb4b4;
+    --risk-red-border: rgba(240, 128, 128, 0.4);
+    --risk-orange-bg: rgba(245, 184, 74, 0.18);
+    --risk-orange-text: #ffd08a;
+    --risk-orange-border: rgba(245, 184, 74, 0.42);
+    --risk-yellow-bg: rgba(250, 204, 21, 0.16);
+    --risk-yellow-text: #fde68a;
+    --risk-yellow-border: rgba(250, 204, 21, 0.38);
+    --risk-green-bg: rgba(95, 217, 168, 0.16);
+    --risk-green-text: #a7f3d0;
+    --risk-green-border: rgba(95, 217, 168, 0.38);
   }
 }
 
@@ -280,14 +338,19 @@ pre code {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--lagoon) 24%, transparent);
 }
 
+.demo-alert-success {
+  border-color: color-mix(in oklab, var(--status-success) 35%, var(--line));
+  background: color-mix(in oklab, var(--status-success) 12%, transparent);
+}
+
 .demo-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border: 1px solid color-mix(in oklab, var(--lagoon-deep) 34%, var(--line));
+  border: 1px solid color-mix(in oklab, var(--aqua) 40%, var(--line));
   border-radius: 0.85rem;
-  background: color-mix(in oklab, var(--lagoon) 22%, var(--surface-strong));
+  background: color-mix(in oklab, var(--aqua) 18%, var(--surface-strong));
   color: var(--sea-ink);
   padding: 0.72rem 1rem;
   font-size: 0.9rem;
@@ -298,7 +361,7 @@ pre code {
 
 .demo-button:hover {
   transform: translateY(-1px);
-  background: color-mix(in oklab, var(--lagoon) 30%, var(--surface-strong));
+  background: color-mix(in oklab, var(--aqua) 28%, var(--surface-strong));
 }
 
 .demo-button:disabled {
@@ -460,5 +523,95 @@ a {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.buque-spinner {
+  display: inline-block;
+  height: 1rem;
+  width: 1rem;
+  animation: spin 0.8s linear infinite;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in oklab, var(--status-warning) 35%, transparent);
+  border-top-color: var(--status-warning);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.buque-log-list {
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--chip-bg) 90%, transparent);
+  color: var(--sea-ink-soft);
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.risk-badge-red {
+  border-color: var(--risk-red-border);
+  background: var(--risk-red-bg);
+  color: var(--risk-red-text);
+}
+
+.risk-badge-orange {
+  border-color: var(--risk-orange-border);
+  background: var(--risk-orange-bg);
+  color: var(--risk-orange-text);
+}
+
+.risk-badge-yellow {
+  border-color: var(--risk-yellow-border);
+  background: var(--risk-yellow-bg);
+  color: var(--risk-yellow-text);
+}
+
+.risk-badge-green {
+  border-color: var(--risk-green-border);
+  background: var(--risk-green-bg);
+  color: var(--risk-green-text);
+}
+
+.sidebar-shell {
+  border-right: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--surface-strong), var(--surface));
+  backdrop-filter: blur(8px);
+}
+
+.sidebar-brand {
+  font-family: "Fraunces", Georgia, serif;
+  color: var(--sea-ink);
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--sea-ink-soft);
+  text-decoration: none;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.sidebar-link:hover {
+  background: color-mix(in oklab, var(--aqua) 10%, transparent);
+  color: var(--sea-ink);
+}
+
+.sidebar-link.active {
+  background: color-mix(in oklab, var(--aqua) 16%, transparent);
+  color: var(--sea-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--aqua) 28%, var(--line));
 }
 

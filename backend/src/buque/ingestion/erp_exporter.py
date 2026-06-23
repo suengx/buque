@@ -4,13 +4,18 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from collections.abc import Callable
+
 from sqlalchemy.orm import Session
 
 from buque.ingestion.gerpgo_session import GerpgGoSession
 from buque.ingestion.parsers import InboundParser, InventoryParser, OrdersParser
+from buque.models.entities import ErpSyncPhase
 from buque.services.rule_config import RuleConfigService
 
 ERP_SOURCES = ("erp_inventory", "erp_orders", "tms_inbound")
+
+PhaseCallback = Callable[[ErpSyncPhase, str], None]
 
 
 @dataclass
@@ -21,6 +26,9 @@ class SourceSyncResult:
     file_path: str | None = None
     error: str | None = None
     ingestion_run_id: int | None = None
+    transport_task_id: str | None = None
+    transport_requested_at: str | None = None
+    file_sha256: str | None = None
 
 
 @dataclass
@@ -116,16 +124,50 @@ def run_ingestion_from_files(
     return result
 
 
-def run_ingestion_from_erp(db: Session, monitor_date: date) -> ErpSyncResult:
+def _attach_transport_meta(result: ErpSyncResult, metas: dict) -> None:
+    from buque.ingestion.transport_center import TransportTaskMeta
+
+    mapping = {
+        "erp_inventory": metas.get("erp_inventory"),
+        "erp_orders": metas.get("erp_orders"),
+    }
+    for source in result.sources:
+        meta: TransportTaskMeta | None = mapping.get(source.source)
+        if meta is None:
+            continue
+        source.transport_task_id = meta.task_id
+        source.transport_requested_at = meta.requested_at.isoformat()
+        source.file_sha256 = meta.file_sha256
+
+
+def run_ingestion_from_erp(
+    db: Session,
+    monitor_date: date,
+    on_phase: PhaseCallback | None = None,
+) -> ErpSyncResult:
+    def report(phase: ErpSyncPhase, message: str) -> None:
+        if on_phase:
+            on_phase(phase, message)
+
+    report(ErpSyncPhase.EXPORTING, "正在导出产品库存…")
     with GerpgGoSession() as session:
         inventory_path = session.export_inventory_merged(monitor_date)
-        orders_path = session.export_orders(monitor_date)
+        report(ErpSyncPhase.EXPORTING, "正在导出全渠道订单…")
+        orders_path = session.export_orders(
+            monitor_date,
+            on_status=lambda msg: report(ErpSyncPhase.EXPORTING, msg),
+        )
+        report(ErpSyncPhase.EXPORTING, "正在抓取 TMS 在途…")
         inbound_path = session.export_tms_inbound(monitor_date)
+        transport_metas = dict(session.transport_metas)
 
-    return run_ingestion_from_files(
+    report(ErpSyncPhase.INGESTING, "正在写入数据库…")
+    result = run_ingestion_from_files(
         db,
         monitor_date,
         inventory_file=inventory_path,
         orders_file=orders_path,
         inbound_file=inbound_path,
     )
+    _attach_transport_meta(result, transport_metas)
+    return result

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from buque.config import get_settings
 from buque.db import SessionLocal
-from buque.services.sync_pipeline import run_full_pipeline
+from buque.services.sync_pipeline import run_analysis_pipeline, run_sync_ingestion
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -21,12 +21,15 @@ def run_daily_pipeline(monitor_date: date | None = None, use_fixtures: bool = Fa
     db: Session = SessionLocal()
     try:
         if use_fixtures:
-            run_full_pipeline(db, md, ingestion="fixtures")
+            ingestion = "fixtures"
         elif settings.erp_base_url:
-            run_full_pipeline(db, md, ingestion="erp")
+            ingestion = "erp"
         else:
             logger.warning("ERP 未配置，跳过抓取")
             return
+
+        run_sync_ingestion(db, md, ingestion=ingestion)
+        run_analysis_pipeline(db, md)
         logger.info("日批完成: %s", md.isoformat())
     finally:
         db.close()

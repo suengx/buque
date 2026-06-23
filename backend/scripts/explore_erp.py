@@ -11,6 +11,7 @@ import json
 import sys
 import traceback
 from datetime import date, datetime
+from functools import partial
 from pathlib import Path
 from typing import Callable
 
@@ -88,7 +89,11 @@ def _explore_export(
     target = run_dir / "exports" / export_name
     try:
         record["screenshots"].append(_shot(page, run_dir, f"{shot_prefix}_01_before"))
-        shell_url, iframe_url, popups = export_fn(page, target)
+        outcome = export_fn(page, target)
+        if len(outcome) == 4:
+            shell_url, iframe_url, popups, _meta = outcome
+        else:
+            shell_url, iframe_url, popups = outcome
         record["shell_url"] = shell_url
         record["iframe_url"] = iframe_url
         record["popups_seen"] = popups
@@ -196,13 +201,14 @@ def main() -> None:
         page = browser.new_context(accept_downloads=True, viewport={"width": 1920, "height": 1080}).new_page()
         gerpgo_ui.login(page)
         _shot(page, run_dir, "00_login")
+        md = date.today()
 
         inv_product = _explore_export(
             page,
             run_dir,
             source="erp_inventory",
             export_name="inventory_product.xlsx",
-            export_fn=gerpgo_ui.export_inventory_product,
+            export_fn=partial(gerpgo_ui.export_inventory_product, monitor_date=md),
             p0_aliases=INVENTORY_P0_COLUMN_ALIASES,
             shot_prefix="inventory_product",
             export_flow=[
@@ -210,8 +216,10 @@ def main() -> None:
                 "goto_shell",
                 "app_frame",
                 "dismiss_modals",
-                "import_export_menu",
-                "export_button",
+                "export_dropdown",
+                "custom_export_menu",
+                "restore_default_config",
+                "modal_export_button",
                 f"transport_center:{TRANSPORT_TASK_HINTS.inventory}",
             ],
         )
@@ -222,7 +230,7 @@ def main() -> None:
             run_dir,
             source="erp_inventory_multi",
             export_name="inventory_multi_platform.xlsx",
-            export_fn=gerpgo_ui.export_inventory_multi_platform,
+            export_fn=partial(gerpgo_ui.export_inventory_multi_platform, monitor_date=md),
             p0_aliases=INVENTORY_P0_COLUMN_ALIASES,
             shot_prefix="inventory_multi",
             export_flow=[
@@ -256,7 +264,7 @@ def main() -> None:
             run_dir,
             source="erp_orders",
             export_name="orders.xlsx",
-            export_fn=gerpgo_ui.export_orders,
+            export_fn=partial(gerpgo_ui.export_orders, monitor_date=md),
             p0_aliases=ORDERS_P0_COLUMN_ALIASES,
             shot_prefix="orders",
             export_flow=[

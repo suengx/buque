@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Callable
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
-from playwright.sync_api import Frame, Page, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Frame, Page
 
 from buque.config import get_settings
 from buque.ingestion.erp_selectors import (
     APP_FRAME_URL_CONTAINS,
     DISMISS_TEXTS,
+    INVENTORY_CUSTOM_EXPORT_MENU_ITEM,
+    INVENTORY_CUSTOM_EXPORT_MODAL_TITLE,
+    INVENTORY_CUSTOM_EXPORT_RESTORE_DEFAULT,
     LOGIN_PATH,
     ORDERS_DATE_QUICK_LABELS,
     ORDERS_EXPORT_MENU_ITEM,
@@ -20,6 +25,15 @@ from buque.ingestion.erp_selectors import (
     TMS_LIST_BATCH_PATTERN,
     TRANSPORT_TASK_HINTS,
     WEB_PREFIX,
+)
+from buque.ingestion.transport_center import (
+    PROCESSING_STATUSES,
+    TransportTask,
+    TransportTaskMeta,
+    file_sha256,
+    find_pending_task,
+    parse_transport_row,
+    select_download_task,
 )
 
 settings = get_settings()
@@ -120,9 +134,10 @@ def dismiss_interruptions(page: Page, frame: Frame | None = None, rounds: int = 
 
 
 def _open_transport_center(page: Page) -> Frame:
-    icon = page.locator(SELECTORS.transport_center_icon).first
-    icon.wait_for(state="visible", timeout=30_000)
-    icon.click()
+    dismiss_interruptions(page)
+    url = shell_url(SELECTORS.transport_center_path)
+    page.goto(url, timeout=60_000)
+    page.wait_for_load_state("domcontentloaded")
     page.wait_for_timeout(2500)
     dismiss_interruptions(page)
     return app_frame(page, "transmission-center")
@@ -136,54 +151,187 @@ def _download_row_text(frame: Frame, index: int) -> str:
     return row.inner_text() if row.count() else dl.inner_text()
 
 
-def download_from_transport_center(
+def _list_transport_tasks(page: Page) -> list[TransportTask]:
+    tc = _open_transport_center(page)
+    dismiss_interruptions(page, tc)
+    downloads = tc.get_by_text("下载", exact=True)
+    tasks: list[TransportTask] = []
+    for i in range(downloads.count()):
+        text = _download_row_text(tc, i)
+        task = parse_transport_row(text, row_index=i, tz=settings.tz)
+        if task is not None:
+            tasks.append(task)
+    return tasks
+
+
+def _snapshot_task_ids(page: Page, task_hint: str) -> set[str]:
+    return {t.task_id for t in _list_transport_tasks(page) if task_hint in t.task_type}
+
+
+def _click_transport_download(page: Page, task_id: str) -> None:
+    tc = _open_transport_center(page)
+    dismiss_interruptions(page, tc)
+    downloads = tc.get_by_text("下载", exact=True)
+    for i in range(downloads.count()):
+        text = _download_row_text(tc, i)
+        if text.startswith(task_id):
+            downloads.nth(i).click(force=True)
+            return
+    raise RuntimeError(f"传输中心未找到任务 {task_id}")
+
+
+def download_fresh_transport_task(
     page: Page,
     target: Path,
-    task_hint: str = "",
+    *,
+    task_hint: str,
+    min_request_date: date,
+    before_task_ids: set[str],
+    export_trigger: Callable[[], None],
     timeout_ms: int | None = None,
-) -> Path:
+    on_status: Callable[[str], None] | None = None,
+    max_download_retries: int = 3,
+) -> TransportTaskMeta:
     timeout = timeout_ms or settings.erp_sync_timeout_ms
     deadline = time.time() + timeout / 1000
     started = time.time()
 
+    export_trigger()
+
+    last_seen: list[TransportTask] = []
+    pending_task: TransportTask | None = None
+    last_status_log = 0.0
+    download_task_id: str | None = None
+    download_failures = 0
+    last_download_error = ""
+
     while time.time() < deadline:
         dismiss_interruptions(page)
-        tc = _open_transport_center(page)
-        dismiss_interruptions(page, tc)
-        downloads = tc.get_by_text("下载", exact=True)
-        count = downloads.count()
-        best_idx: int | None = None
-        best_text = ""
-
-        for i in range(count):
-            text = _download_row_text(tc, i)
-            if task_hint and task_hint not in text:
-                continue
-            if "处理中" in text or "失败" in text:
-                continue
-            if "已完成" not in text and "完成" not in text:
-                continue
-            best_idx = i
-            best_text = text
-            break
-
-        if best_idx is not None:
-            try:
-                with page.expect_download(timeout=60_000) as info:
-                    downloads.nth(best_idx).click(force=True)
-                info.value.save_as(str(target))
-                if target.exists() and target.stat().st_size > 0:
-                    return target
-            except Exception:
-                dismiss_interruptions(page, tc)
+        tasks = _list_transport_tasks(page)
+        last_seen = [t for t in tasks if task_hint in t.task_type]
+        pending = find_pending_task(
+            tasks,
+            hint=task_hint,
+            min_request_date=min_request_date,
+            before_task_ids=before_task_ids,
+        )
+        if pending is not None:
+            pending_task = pending
 
         elapsed = int(time.time() - started)
+        if on_status and elapsed - last_status_log >= 30:
+            if pending_task is not None:
+                on_status(
+                    f"等待传输中心任务 {pending_task.task_id} {pending_task.status}… "
+                    f"(已等待 {elapsed}s)"
+                )
+            else:
+                on_status(
+                    f"轮询传输中心等待新任务 {task_hint}… "
+                    f"(已等待 {elapsed}s, 可见 {len(last_seen)} 条)"
+                )
+            last_status_log = elapsed
+
+        selected = select_download_task(
+            tasks,
+            hint=task_hint,
+            min_request_date=min_request_date,
+            before_task_ids=before_task_ids,
+        )
+        if selected is not None:
+            if download_task_id != selected.task_id:
+                download_task_id = selected.task_id
+                download_failures = 0
+            try:
+                with page.expect_download(timeout=60_000) as info:
+                    _click_transport_download(page, selected.task_id)
+                info.value.save_as(str(target))
+                if target.exists() and target.stat().st_size > 0:
+                    return TransportTaskMeta(
+                        task_id=selected.task_id,
+                        requested_at=selected.requested_at,
+                        task_type=selected.task_type,
+                        file_sha256=file_sha256(target),
+                    )
+                last_download_error = f"文件为空: {target}"
+            except Exception as exc:
+                last_download_error = str(exc)
+                dismiss_interruptions(page)
+            download_failures += 1
+            if on_status:
+                on_status(
+                    f"传输中心下载失败 task={selected.task_id} "
+                    f"({download_failures}/{max_download_retries}): {last_download_error}"
+                )
+            if download_failures >= max_download_retries:
+                raise RuntimeError(
+                    f"传输中心下载失败 (task_id={selected.task_id}, "
+                    f"retries={download_failures}, error={last_download_error})"
+                )
+
         if elapsed > 30 and elapsed % 30 < 4:
             page.wait_for_timeout(5000)
         else:
             page.wait_for_timeout(3000)
 
-    raise RuntimeError(f"传输中心下载超时 (hint={task_hint}, waited={int(time.time()-started)}s)")
+    waited = int(time.time() - started)
+    latest = max((t.requested_at for t in last_seen), default=None)
+    base = (
+        f"hint={task_hint}, min_date={min_request_date}, "
+        f"before_ids={sorted(before_task_ids)}, latest_seen={latest}, waited={waited}s"
+    )
+    if pending_task is not None and pending_task.status in PROCESSING_STATUSES:
+        raise RuntimeError(
+            f"传输中心新任务处理超时 (task_id={pending_task.task_id}, "
+            f"status={pending_task.status}, {base})"
+        )
+    if download_failures > 0 and download_task_id:
+        raise RuntimeError(
+            f"传输中心下载失败 (task_id={download_task_id}, "
+            f"retries={download_failures}, error={last_download_error}, {base})"
+        )
+    raise RuntimeError(f"传输中心未检测到新导出任务 ({base})")
+
+
+def confirm_pending_export(page: Page, frame: Frame | None = None) -> None:
+    scopes: list[Page | Frame] = [page]
+    if frame is not None:
+        scopes.insert(0, frame)
+    for scope in scopes:
+        for label in ("确认", "确定"):
+            btn = scope.get_by_role("button", name=label)
+            if btn.count() == 0:
+                continue
+            try:
+                btn.first.click(timeout=2000, force=True)
+                scope.wait_for_timeout(800)
+                return
+            except Exception:
+                pass
+
+
+def trigger_inventory_custom_export(frame: Frame) -> None:
+    """产品库存页：导出下拉 → 自定义导出 → 弹窗导出（传输中心入队）。"""
+    export_btn = frame.get_by_role("button", name=SELECTORS.export_button_role, exact=True)
+    export_btn.first.wait_for(state="visible", timeout=30_000)
+    export_btn.first.click(force=True)
+    frame.wait_for_timeout(800)
+
+    custom_item = frame.get_by_text(INVENTORY_CUSTOM_EXPORT_MENU_ITEM, exact=True)
+    custom_item.first.wait_for(state="visible", timeout=15_000)
+    custom_item.first.click(force=True)
+    frame.wait_for_timeout(1200)
+
+    modal = frame.locator(".arco-modal").filter(has_text=INVENTORY_CUSTOM_EXPORT_MODAL_TITLE)
+    modal.first.wait_for(state="visible", timeout=15_000)
+
+    restore = modal.get_by_text(INVENTORY_CUSTOM_EXPORT_RESTORE_DEFAULT, exact=True)
+    if restore.count():
+        restore.first.click(force=True)
+        frame.wait_for_timeout(500)
+
+    modal.get_by_role("button", name=SELECTORS.export_button_role, exact=True).last.click(force=True)
+    frame.wait_for_timeout(1200)
 
 
 def click_import_export(frame: Frame) -> None:
@@ -224,11 +372,16 @@ def apply_orders_date_window(frame: Frame) -> None:
 
 
 def trigger_orders_export(frame: Frame) -> None:
-    frame.get_by_role("button", name=SELECTORS.export_button_role, exact=True).click()
+    export_btn = frame.get_by_role("button", name=SELECTORS.export_button_role, exact=True)
+    export_btn.first.wait_for(state="visible", timeout=30_000)
+    export_btn.first.click(force=True)
     frame.wait_for_timeout(800)
-    frame.get_by_text(ORDERS_EXPORT_MENU_ITEM, exact=True).first.click()
+    menu_item = frame.get_by_text(ORDERS_EXPORT_MENU_ITEM, exact=True).first
+    menu_item.wait_for(state="visible", timeout=15_000)
+    menu_item.click(force=True)
     frame.wait_for_timeout(1200)
-    frame.get_by_role("button", name=SELECTORS.export_button_role).last.click()
+    frame.get_by_role("button", name=SELECTORS.export_button_role).last.click(force=True)
+    frame.wait_for_timeout(1200)
 
 
 def apply_tms_status_filters(frame: Frame) -> None:
@@ -244,35 +397,80 @@ def apply_tms_status_filters(frame: Frame) -> None:
     frame.wait_for_timeout(1500)
 
 
-def _try_immediate_download(page: Page, target: Path, action) -> bool:
-    try:
-        with page.expect_download(timeout=8_000) as info:
-            action()
-        info.value.save_as(str(target))
-        return target.exists() and target.stat().st_size > 0
-    except PlaywrightTimeout:
-        return False
+def _fresh_export(
+    page: Page,
+    target: Path,
+    monitor_date: date,
+    task_hint: str,
+    shell_path: str,
+    frame_hint: str,
+    export_trigger: Callable[[Frame], None],
+    prepare_frame: Callable[[Frame], None] | None = None,
+    timeout_ms: int | None = None,
+    on_status: Callable[[str], None] | None = None,
+) -> TransportTaskMeta:
+    goto_shell(page, shell_path)
+    frame = app_frame(page, frame_hint)
+    dismiss_interruptions(page, frame)
+    if prepare_frame:
+        prepare_frame(frame)
+        dismiss_interruptions(page, frame)
+    before_ids = _snapshot_task_ids(page, task_hint)
+    goto_shell(page, shell_path)
+    frame = app_frame(page, frame_hint)
+    dismiss_interruptions(page, frame)
+    if prepare_frame:
+        prepare_frame(frame)
+        dismiss_interruptions(page, frame)
+
+    today = datetime.now(settings.tz).date()
+    min_request_date = min(monitor_date, today)
+
+    def _trigger() -> None:
+        frame = app_frame(page, frame_hint)
+        export_trigger(frame)
+        confirm_pending_export(page, frame)
+
+    return download_fresh_transport_task(
+        page,
+        target,
+        task_hint=task_hint,
+        min_request_date=min_request_date,
+        before_task_ids=before_ids,
+        export_trigger=_trigger,
+        timeout_ms=timeout_ms,
+        on_status=on_status,
+    )
 
 
-def export_inventory_product(page: Page, target: Path) -> tuple[str, str, list[str]]:
+def export_inventory_product(
+    page: Page, target: Path, monitor_date: date
+) -> tuple[str, str, list[str], TransportTaskMeta]:
     url = goto_shell(page, "/gip/inventoryManage/product")
     frame = app_frame(page, "inventoryManage/product")
     popups = dismiss_interruptions(page, frame)
     dismiss_interruptions(page, frame)
 
-    def _export():
-        click_import_export(frame)
-        click_export_button(frame)
+    def _trigger_inventory(frame: Frame) -> None:
+        trigger_inventory_custom_export(frame)
 
-    if not _try_immediate_download(page, target, _export):
-        _export()
-        download_from_transport_center(page, target, task_hint=TRANSPORT_TASK_HINTS.inventory)
+    meta = _fresh_export(
+        page,
+        target,
+        monitor_date,
+        TRANSPORT_TASK_HINTS.inventory,
+        "/gip/inventoryManage/product",
+        "inventoryManage/product",
+        _trigger_inventory,
+    )
     if not target.exists() or target.stat().st_size == 0:
         raise RuntimeError(f"库存导出无效: {target}")
-    return url, frame.url, popups
+    return url, frame.url, popups, meta
 
 
-def export_inventory_multi_platform(page: Page, target: Path, tab_name: str | None = None) -> tuple[str, str, list[str]]:
+def export_inventory_multi_platform(
+    page: Page, target: Path, monitor_date: date, tab_name: str | None = None
+) -> tuple[str, str, list[str], TransportTaskMeta]:
     url = goto_shell(page, "/gip/inventoryManage/multiPlatform")
     frame = app_frame(page, "multiPlatform")
     popups = dismiss_interruptions(page, frame)
@@ -283,33 +481,56 @@ def export_inventory_multi_platform(page: Page, target: Path, tab_name: str | No
             frame.wait_for_timeout(1500)
     dismiss_interruptions(page, frame)
 
-    def _export():
-        click_direct_export(frame)
+    def _trigger(f: Frame) -> None:
+        if tab_name:
+            tab = f.get_by_text(tab_name, exact=False)
+            if tab.count():
+                tab.first.click(force=True)
+                f.wait_for_timeout(1500)
+        click_direct_export(f)
 
-    if not _try_immediate_download(page, target, _export):
-        _export()
-        download_from_transport_center(page, target, task_hint=TRANSPORT_TASK_HINTS.inventory)
+    meta = _fresh_export(
+        page,
+        target,
+        monitor_date,
+        TRANSPORT_TASK_HINTS.inventory,
+        "/gip/inventoryManage/multiPlatform",
+        "multiPlatform",
+        _trigger,
+    )
     if not target.exists() or target.stat().st_size == 0:
         raise RuntimeError(f"multiPlatform 导出无效: {target}")
-    return url, frame.url, popups
+    return url, frame.url, popups, meta
 
 
-def export_orders(page: Page, target: Path) -> tuple[str, str, list[str]]:
+def export_orders(
+    page: Page,
+    target: Path,
+    monitor_date: date,
+    *,
+    on_status: Callable[[str], None] | None = None,
+) -> tuple[str, str, list[str], TransportTaskMeta]:
     url = goto_shell(page, "/sales/multiChannel/orders")
     frame = app_frame(page, "multiChannel/orders")
     popups = dismiss_interruptions(page, frame)
     apply_orders_date_window(frame)
     dismiss_interruptions(page, frame)
 
-    def _export():
-        trigger_orders_export(frame)
-
-    if not _try_immediate_download(page, target, _export):
-        _export()
-        download_from_transport_center(page, target, task_hint=TRANSPORT_TASK_HINTS.orders)
+    meta = _fresh_export(
+        page,
+        target,
+        monitor_date,
+        TRANSPORT_TASK_HINTS.orders,
+        "/sales/multiChannel/orders",
+        "multiChannel/orders",
+        trigger_orders_export,
+        prepare_frame=apply_orders_date_window,
+        timeout_ms=settings.erp_orders_export_timeout_ms,
+        on_status=on_status,
+    )
     if not target.exists() or target.stat().st_size == 0:
         raise RuntimeError(f"订单导出无效: {target}")
-    return url, frame.url, popups
+    return url, frame.url, popups, meta
 
 
 def _parse_tms_receipt_tab(body: str, batch_id: str, warehouse: str, tms_status: str) -> list[dict[str, object]]:
@@ -431,43 +652,64 @@ def export_page_to_file(
     task_hint: str = "",
     before_export=None,
     export_mode: str = "import_export",
-) -> tuple[str, str, list[str]]:
+    monitor_date: date | None = None,
+) -> tuple[str, str, list[str], TransportTaskMeta | None]:
+    md = monitor_date or datetime.now(settings.tz).date()
     if export_mode == "orders":
-        return export_orders(page, target)
+        return export_orders(page, target, md)
     if export_mode == "direct":
         url = goto_shell(page, shell_path)
         frame = app_frame(page, path_hint=path_hint or shell_path.strip("/").split("/")[-1])
         popups = dismiss_interruptions(page, frame)
-        if before_export:
-            before_export(frame)
-        dismiss_interruptions(page, frame)
+        hint = path_hint or shell_path.strip("/").split("/")[-1]
 
-        def _export():
-            click_direct_export(frame)
+        def _prepare(f: Frame) -> None:
+            if before_export:
+                before_export(f)
 
-        if not _try_immediate_download(page, target, _export):
-            _export()
-            download_from_transport_center(page, target, task_hint=task_hint)
+        meta = _fresh_export(
+            page,
+            target,
+            md,
+            task_hint,
+            shell_path,
+            hint,
+            click_direct_export,
+            prepare_frame=_prepare if before_export else None,
+        )
         if not target.exists() or target.stat().st_size == 0:
             raise RuntimeError(f"导出文件无效: {target}")
-        return url, frame.url, popups
+        return url, frame.url, popups, meta
     if export_mode == "tms_scrape":
-        return scrape_tms_inbound(page, target)
+        url, iframe, popups = scrape_tms_inbound(page, target)
+        return url, iframe, popups, None
 
     url = goto_shell(page, shell_path)
     frame = app_frame(page, path_hint=path_hint or shell_path.strip("/").split("/")[-1])
     popups = dismiss_interruptions(page, frame)
-    if before_export:
-        before_export(frame)
-    dismiss_interruptions(page, frame)
+    hint = path_hint or shell_path.strip("/").split("/")[-1]
 
-    def _export():
-        click_import_export(frame)
-        click_export_button(frame)
+    def _prepare(f: Frame) -> None:
+        if before_export:
+            before_export(f)
 
-    if not _try_immediate_download(page, target, _export):
-        _export()
-        download_from_transport_center(page, target, task_hint=task_hint)
+    def _trigger(f: Frame) -> None:
+        if "inventoryManage/product" in shell_path:
+            trigger_inventory_custom_export(f)
+        else:
+            click_import_export(f)
+            click_export_button(f)
+
+    meta = _fresh_export(
+        page,
+        target,
+        md,
+        task_hint,
+        shell_path,
+        hint,
+        _trigger,
+        prepare_frame=_prepare if before_export else None,
+    )
     if not target.exists() or target.stat().st_size == 0:
         raise RuntimeError(f"导出文件无效: {target}")
-    return url, frame.url, popups
+    return url, frame.url, popups, meta

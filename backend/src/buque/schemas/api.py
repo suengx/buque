@@ -119,12 +119,28 @@ class PipelineRunResult(BaseModel):
 
 class ErpSyncRequest(BaseModel):
     monitor_date: date | None = None
-    run_pipeline: bool = False
 
 
 class ErpSyncAccepted(BaseModel):
     monitor_date: date
+    job_id: int
     message: str = "ERP 同步已启动"
+
+
+class AnalysisRequest(BaseModel):
+    monitor_date: date | None = None
+
+
+class AnalysisAccepted(BaseModel):
+    monitor_date: date
+    job_id: int
+    message: str = "分析任务已启动"
+
+
+class ErpSyncLogEntry(BaseModel):
+    level: str
+    message: str
+    created_at: datetime
 
 
 class IngestionSourceStatus(BaseModel):
@@ -140,4 +156,35 @@ class IngestionSourceStatus(BaseModel):
 class ErpSyncStatusResponse(BaseModel):
     monitor_date: date
     running: bool
+    job_id: int | None = None
+    job_status: str
+    phase: str | None = None
+    phase_message: str | None = None
+    error: str | None = None
+    finished_at: datetime | None = None
+    sync_summary: dict | None = None
+    logs: list[ErpSyncLogEntry] = []
     sources: list[IngestionSourceStatus]
+
+
+class AnalysisStatusResponse(BaseModel):
+    monitor_date: date
+    running: bool
+    job_id: int | None = None
+    job_status: str
+    phase: str | None = None
+    phase_message: str | None = None
+    error: str | None = None
+    finished_at: datetime | None = None
+    progress_current: int | None = None
+    progress_total: int | None = None
+    analysis_summary: dict | None = None
+    logs: list[ErpSyncLogEntry] = []
+
+
+class ErpSyncLatestResponse(BaseModel):
+    monitor_date: date
+    has_sync: bool
+    job_id: int | None = None
+    finished_at: datetime | None = None
+    sync_summary: dict | None = None

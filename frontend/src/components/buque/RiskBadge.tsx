@@ -1,10 +1,10 @@
 import { cn } from '#/lib/utils'
 
-const levelStyles: Record<string, string> = {
-  RED: 'bg-red-100 text-red-700 border-red-200',
-  ORANGE: 'bg-orange-100 text-orange-700 border-orange-200',
-  YELLOW: 'bg-amber-100 text-amber-800 border-amber-200',
-  GREEN: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+const levelClass: Record<string, string> = {
+  RED: 'risk-badge-red',
+  ORANGE: 'risk-badge-orange',
+  YELLOW: 'risk-badge-yellow',
+  GREEN: 'risk-badge-green',
 }
 
 const levelLabel: Record<string, string> = {
@@ -16,12 +16,7 @@ const levelLabel: Record<string, string> = {
 
 export function RiskBadge({ level }: { level: string }) {
   return (
-    <span
-      className={cn(
-        'inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold',
-        levelStyles[level] ?? 'bg-slate-100 text-slate-700',
-      )}
-    >
+    <span className={cn('risk-badge', levelClass[level] ?? 'risk-badge-yellow')}>
       {levelLabel[level] ?? level}
     </span>
   )
@@ -34,16 +29,7 @@ export function GlassCard({
   children: React.ReactNode
   className?: string
 }) {
-  return (
-    <div
-      className={cn(
-        'rounded-2xl border border-white/30 bg-white/70 p-5 shadow-lg backdrop-blur-xl',
-        className,
-      )}
-    >
-      {children}
-    </div>
-  )
+  return <div className={cn('demo-card', className)}>{children}</div>
 }
 
 export function StatCard({
@@ -57,9 +43,9 @@ export function StatCard({
 }) {
   return (
     <GlassCard>
-      <div className="text-sm text-[#45515A]">{title}</div>
-      <div className="mt-2 text-3xl font-bold text-[#0B3D3A]">{value}</div>
-      {hint ? <div className="mt-1 text-xs text-[#45515A]/80">{hint}</div> : null}
+      <div className="text-sm demo-muted">{title}</div>
+      <div className="mt-2 text-3xl font-bold text-[var(--sea-ink)]">{value}</div>
+      {hint ? <div className="mt-1 text-xs demo-muted">{hint}</div> : null}
     </GlassCard>
   )
 }

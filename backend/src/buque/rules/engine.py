@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -25,7 +25,23 @@ LEVEL_ORDER = [RiskLevel.GREEN, RiskLevel.YELLOW, RiskLevel.ORANGE, RiskLevel.RE
 def _dec(value: Any) -> Decimal | None:
     if value is None:
         return None
-    return Decimal(str(value))
+    try:
+        dec = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if dec.is_nan():
+        return None
+    return dec
+
+
+def _valid_sales(value: Any) -> bool:
+    dec = _dec(value)
+    if dec is None:
+        return False
+    try:
+        return dec > 0
+    except InvalidOperation:
+        return False
 
 
 def _upgrade(level: RiskLevel, steps: int = 1) -> RiskLevel:
@@ -80,7 +96,7 @@ class RuleEngine:
         )
         findings: list[MonitorFinding] = []
         for inv, sku in rows:
-            if inv.ref_daily_sales is None or inv.ref_daily_sales <= 0:
+            if not _valid_sales(inv.ref_daily_sales):
                 findings.append(
                     MonitorFinding(
                         sku=inv.sku,
@@ -94,7 +110,7 @@ class RuleEngine:
                         dos=None,
                         ref_daily_sales=_dec(inv.ref_daily_sales),
                         available_inventory=inv.available_inventory,
-                        requires_explanation=True,
+                        requires_explanation=False,
                     )
                 )
                 continue
@@ -141,9 +157,11 @@ class RuleEngine:
                 continue
             total_avail = sum(r.available_inventory for r in rows)
             ref_sales = sum(
-                Decimal(r.ref_daily_sales or 0) for r in rows if r.ref_daily_sales
+                _dec(r.ref_daily_sales) or Decimal(0)
+                for r in rows
+                if _valid_sales(r.ref_daily_sales)
             )
-            if ref_sales <= 0:
+            if not _valid_sales(ref_sales):
                 continue
             dos = Decimal(total_avail) / ref_sales
             sales_metrics = self._sales_metrics(sku_code, None, MonitoringScope.GLOBAL)

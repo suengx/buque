@@ -11,6 +11,7 @@ from buque.ingestion.parsers import (
     InventoryParser,
     OrdersParser,
     _normalize_inventory_row,
+    _optional_decimal,
     _split_product_sku,
 )
 from buque.models.entities import (
@@ -58,6 +59,27 @@ def test_normalize_inventory_row() -> None:
     sku, product_name = _normalize_inventory_row(row)
     assert sku == "C0150515"
     assert product_name == "COS沙发"
+
+
+def test_optional_decimal_nan() -> None:
+    from decimal import Decimal
+
+    assert _optional_decimal(float("nan")) is None
+    assert _optional_decimal(None) is None
+    assert _optional_decimal("3.5") == Decimal("3.5")
+
+
+def test_inventory_parser_nan_ref_sales(db_session: Session, tmp_path: Path) -> None:
+    md = date(2026, 6, 22)
+    csv = tmp_path / "inv_nan.csv"
+    csv.write_text("sku,warehouse,available_inventory,ref_daily_sales\nNAN-SKU,WH1,10,\n", encoding="utf-8")
+    InventoryParser(db_session, md).ingest_file(csv)
+    row = (
+        db_session.query(FactInventoryDaily)
+        .filter(FactInventoryDaily.sku == "NAN-SKU")
+        .one()
+    )
+    assert row.ref_daily_sales is None
 
 
 def test_inventory_parser_gerpgo_sample(db_session: Session) -> None:

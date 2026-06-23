@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -46,6 +48,22 @@ def _finish_run(db: Session, run: IngestionRun, row_count: int, error: str | Non
     run.status = IngestionStatus.FAILED if error else IngestionStatus.SUCCESS
     run.error_message = error
     db.commit()
+
+
+def _optional_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, float) and pd.isna(value):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    try:
+        dec = Decimal(str(value))
+        if dec.is_nan():
+            return None
+        return dec
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def _ensure_sku(db: Session, sku: str, product_name: str | None = None) -> None:
@@ -163,8 +181,8 @@ class InventoryParser:
                 reserved_inventory=int(row.get("reserved_inventory", 0) or 0),
                 on_hand_inventory=int(row.get("on_hand_inventory", 0) or 0),
                 in_transit_no_eta=int(row.get("in_transit_no_eta", 0) or 0),
-                ref_daily_sales=row.get("ref_daily_sales"),
-                turnover_days=row.get("turnover_days"),
+                ref_daily_sales=_optional_decimal(row.get("ref_daily_sales")),
+                turnover_days=_optional_decimal(row.get("turnover_days")),
             )
             if existing:
                 for k, v in payload.items():

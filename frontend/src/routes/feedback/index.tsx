@@ -37,8 +37,8 @@ function FeedbackPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#0B3D3A]">人工反馈</h1>
-        <p className="text-sm text-[#45515A]">记录采纳 / 驳回 / 部分采纳</p>
+        <h1 className="demo-title text-2xl">人工反馈</h1>
+        <p className="text-sm demo-muted">记录采纳 / 驳回 / 部分采纳</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard title="反馈总数" value={stats?.total ?? 0} />

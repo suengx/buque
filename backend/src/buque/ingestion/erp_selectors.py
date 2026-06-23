@@ -39,6 +39,10 @@ ORDERS_DATE_WINDOW_DAYS = 30
 ORDERS_DATE_QUICK_LABELS = ("近30天", "30天", "最近30天", "Last 30 days")
 ORDERS_EXPORT_MENU_ITEM = "导出订单行数据"
 
+INVENTORY_CUSTOM_EXPORT_MENU_ITEM = "自定义导出"
+INVENTORY_CUSTOM_EXPORT_MODAL_TITLE = "自定义导出"
+INVENTORY_CUSTOM_EXPORT_RESTORE_DEFAULT = "恢复默认配置"
+
 INVENTORY_P0_COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "sku": ("SKU", "sku", "产品SKU"),
     "warehouse": ("仓库", "warehouse", "目的仓"),
@@ -78,7 +82,11 @@ class ErpSelectors:
     login_submit: str = 'button:has-text("登录")'
     import_export_menu: str = "text=导入导出"
     export_button_role: str = "导出"
+    inventory_custom_export_menu: str = "自定义导出"
+    inventory_custom_export_modal_title: str = "自定义导出"
+    inventory_custom_export_restore_default: str = "恢复默认配置"
     orders_date_picker: str = ".arco-picker"
+    transport_center_path: str = "/platform/reports/transmission-center"
     transport_center_icon: str = ".download-icon"
     modal_close: str = ".arco-modal-close-icon, .arco-icon-close"
     mask: str = ".mask"

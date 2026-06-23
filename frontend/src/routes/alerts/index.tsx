@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, queryKeys } from '#/lib/api'
-import { GlassCard, RiskBadge } from '#/components/buque/RiskBadge'
+import { RiskBadge } from '#/components/buque/RiskBadge'
 
 export const Route = createFileRoute('/alerts/')({
   component: AlertsPage,
@@ -13,16 +13,16 @@ function AlertsPage() {
     queryFn: () => api.alerts({ page: 1, page_size: 50 }),
   })
 
-  if (isLoading) return <div className="p-8">加载风险清单...</div>
-  if (error) return <div className="p-8 text-red-600">无法加载风险清单。</div>
+  if (isLoading) return <div className="p-8 demo-muted">加载风险清单...</div>
+  if (error) return <div className="p-8 text-[var(--status-danger)]">无法加载风险清单。</div>
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#0B3D3A]">风险预警中心</h1>
-        <p className="text-sm text-[#45515A]">WAREHOUSE 作用域 · 共 {data?.total ?? 0} 条</p>
+        <h1 className="demo-title text-2xl">风险预警中心</h1>
+        <p className="text-sm demo-muted">WAREHOUSE 作用域 · 共 {data?.total ?? 0} 条</p>
       </div>
-      <GlassCard className="overflow-x-auto p-0">
+      <div className="demo-table-shell">
         <table className="demo-table w-full min-w-[960px]">
           <thead>
             <tr>
@@ -55,7 +55,7 @@ function AlertsPage() {
                     to="/alerts/$skuId"
                     params={{ skuId: row.sku }}
                     search={{ warehouse: row.warehouse ?? undefined }}
-                    className="text-[#0FA58A] hover:underline"
+                    className="text-[var(--aqua)] hover:underline"
                   >
                     详情
                   </Link>
@@ -64,7 +64,7 @@ function AlertsPage() {
             ))}
           </tbody>
         </table>
-      </GlassCard>
+      </div>
     </div>
   )
 }

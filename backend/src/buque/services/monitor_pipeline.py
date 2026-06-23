@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import date
 
 import httpx
 from sqlalchemy.orm import Session
 
 from buque.config import get_settings
-from buque.models.entities import EventPool, FactAgentExplain, FactMonitorResult, MonitoringScope, RiskLevel
+from buque.models.entities import (
+    ErpSyncPhase,
+    EventPool,
+    FactAgentExplain,
+    FactMonitorResult,
+    MonitoringScope,
+    RiskLevel,
+    RiskType,
+)
 from buque.rules.engine import MonitorFinding, RuleEngine
 from buque.services.rule_config import RuleConfigService
 
@@ -35,13 +44,19 @@ class MonitorPersistence:
     def persist_findings(self, findings: list[MonitorFinding]) -> list[FactMonitorResult]:
         saved: list[FactMonitorResult] = []
         for f in findings:
-            row = FactMonitorResult(
-                date=self.monitor_date,
-                sku=f.sku,
-                warehouse=f.warehouse,
+            existing = (
+                self.db.query(FactMonitorResult)
+                .filter(
+                    FactMonitorResult.date == self.monitor_date,
+                    FactMonitorResult.sku == f.sku,
+                    FactMonitorResult.warehouse == f.warehouse,
+                    FactMonitorResult.scope == f.scope,
+                    FactMonitorResult.risk_type == f.risk_type,
+                )
+                .first()
+            )
+            payload = dict(
                 channel=f.channel,
-                scope=f.scope,
-                risk_type=f.risk_type,
                 risk_level=f.risk_level,
                 trigger_rule=f.trigger_rule,
                 trigger_metrics=f.trigger_metrics,
@@ -53,7 +68,20 @@ class MonitorPersistence:
                 requires_explanation=f.requires_explanation,
                 requires_human_confirm=f.requires_human_confirm,
             )
-            self.db.add(row)
+            if existing:
+                for key, value in payload.items():
+                    setattr(existing, key, value)
+                row = existing
+            else:
+                row = FactMonitorResult(
+                    date=self.monitor_date,
+                    sku=f.sku,
+                    warehouse=f.warehouse,
+                    **payload,
+                    scope=f.scope,
+                    risk_type=f.risk_type,
+                )
+                self.db.add(row)
             saved.append(row)
         self.db.commit()
         for row in saved:
@@ -61,16 +89,17 @@ class MonitorPersistence:
         return saved
 
     def build_event_pool(self, results: list[FactMonitorResult]) -> list[EventPool]:
+        self.db.query(EventPool).filter(EventPool.date == self.monitor_date).delete()
+        self.db.commit()
         events: list[EventPool] = []
         for r in results:
             if not r.requires_explanation:
                 continue
+            if r.risk_type == RiskType.DATA_ANOMALY:
+                continue
             if r.scope != MonitoringScope.WAREHOUSE:
                 continue
             event_id = f"{r.date.isoformat()}:{r.sku}:{r.warehouse}:{r.risk_type.value}"
-            existing = self.db.query(EventPool).filter(EventPool.event_id == event_id).first()
-            if existing:
-                continue
             ev = EventPool(
                 event_id=event_id,
                 date=r.date,
@@ -106,8 +135,13 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
     def __init__(self, db: Session):
         self.db = db
 
-    def explain_events(self, monitor_date: date) -> int:
+    def explain_events(
+        self,
+        monitor_date: date,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> int:
         events = self.db.query(EventPool).filter(EventPool.date == monitor_date).all()
+        total = len(events)
         count = 0
         for event in events:
             if (
@@ -118,6 +152,9 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
                 )
                 .first()
             ):
+                count += 1
+                if on_progress:
+                    on_progress(count, total)
                 continue
             payload = self._explain_one(event)
             self.db.add(
@@ -139,6 +176,8 @@ suggested_action, responsible_role, action_deadline, require_human_confirm, conf
                 )
             )
             count += 1
+            if on_progress:
+                on_progress(count, total)
         self.db.commit()
         return count
 
@@ -232,3 +271,54 @@ def run_event_pool_and_explain(db: Session, monitor_date: date) -> tuple[int, in
     events = MonitorPersistence(db, monitor_date).build_event_pool(results)
     explained = ExplainerAgent(db).explain_events(monitor_date)
     return len(events), explained
+
+
+AnalysisProgressCallback = Callable[
+    [ErpSyncPhase, str, int | None, int | None],
+    None,
+]
+
+
+def run_analysis_pipeline(
+    db: Session,
+    monitor_date: date,
+    on_progress: AnalysisProgressCallback | None = None,
+) -> dict[str, int]:
+    from buque.quality.checker import DataQualityChecker
+
+    def report(
+        phase: ErpSyncPhase,
+        message: str,
+        current: int | None = None,
+        total: int | None = None,
+    ) -> None:
+        if on_progress:
+            on_progress(phase, message, current, total)
+
+    report(ErpSyncPhase.QUALITY, "数据质量检查…")
+    issues = DataQualityChecker(db, monitor_date).run()
+
+    report(ErpSyncPhase.RULES, "规则计算…")
+    results = run_rules(db, monitor_date)
+
+    report(ErpSyncPhase.EVENTS, "构建事件池…")
+    events = MonitorPersistence(db, monitor_date).build_event_pool(results)
+    event_count = len(events)
+
+    def explain_progress(done: int, total: int) -> None:
+        report(
+            ErpSyncPhase.EXPLAIN,
+            f"生成解释 {done}/{total}",
+            done,
+            total,
+        )
+
+    report(ErpSyncPhase.EXPLAIN, f"生成解释 0/{event_count}", 0, event_count)
+    explained = ExplainerAgent(db).explain_events(monitor_date, on_progress=explain_progress)
+
+    return {
+        "quality_issues": len(issues),
+        "monitor_results": len(results),
+        "events": event_count,
+        "explained": explained,
+    }

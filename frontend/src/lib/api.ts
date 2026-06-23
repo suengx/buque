@@ -90,11 +90,49 @@ export type IngestionSourceStatus = {
 export type ErpSyncStatusResponse = {
   monitor_date: string
   running: boolean
+  job_id: number | null
+  job_status: string
+  phase: string | null
+  phase_message: string | null
+  error: string | null
+  finished_at: string | null
+  sync_summary: Record<string, unknown> | null
+  logs: { level: string; message: string; created_at: string }[]
   sources: IngestionSourceStatus[]
+}
+
+export type ErpSyncLatestResponse = {
+  monitor_date: string
+  has_sync: boolean
+  job_id: number | null
+  finished_at: string | null
+  sync_summary: Record<string, unknown> | null
+}
+
+export type AnalysisStatusResponse = {
+  monitor_date: string
+  running: boolean
+  job_id: number | null
+  job_status: string
+  phase: string | null
+  phase_message: string | null
+  error: string | null
+  finished_at: string | null
+  progress_current: number | null
+  progress_total: number | null
+  analysis_summary: Record<string, number> | null
+  logs: { level: string; message: string; created_at: string }[]
+}
+
+export type AnalysisAccepted = {
+  monitor_date: string
+  job_id: number
+  message: string
 }
 
 export type ErpSyncAccepted = {
   monitor_date: string
+  job_id: number
   message: string
 }
 
@@ -122,18 +160,36 @@ export const api = {
   createFeedback: (body: Record<string, unknown>) =>
     request('/feedback', { method: 'POST', body: JSON.stringify(body) }),
   feedbackStats: () => request<FeedbackStats>('/feedback/stats'),
-  startErpSync: (opts: { monitorDate?: string; runPipeline: boolean }) =>
+  startErpSync: (opts: { monitorDate?: string }) =>
     request<ErpSyncAccepted>('/admin/sync/erp', {
       method: 'POST',
       body: JSON.stringify({
         monitor_date: opts.monitorDate,
-        run_pipeline: opts.runPipeline,
       }),
     }),
-  getErpSyncStatus: (monitorDate?: string) =>
-    request<ErpSyncStatusResponse>(
-      `/admin/sync/status${monitorDate ? `?monitor_date=${monitorDate}` : ''}`,
-    ),
+  getErpSyncStatus: (monitorDate?: string, jobId?: number) => {
+    const q = new URLSearchParams()
+    if (monitorDate) q.set('monitor_date', monitorDate)
+    if (jobId !== undefined) q.set('job_id', String(jobId))
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<ErpSyncStatusResponse>(`/admin/sync/status${suffix}`)
+  },
+  getErpSyncLatest: (monitorDate?: string) => {
+    const q = monitorDate ? `?monitor_date=${monitorDate}` : ''
+    return request<ErpSyncLatestResponse>(`/admin/sync/latest${q}`)
+  },
+  startAnalysis: (opts: { monitorDate?: string }) =>
+    request<AnalysisAccepted>('/admin/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ monitor_date: opts.monitorDate }),
+    }),
+  getAnalysisStatus: (monitorDate?: string, jobId?: number) => {
+    const q = new URLSearchParams()
+    if (monitorDate) q.set('monitor_date', monitorDate)
+    if (jobId !== undefined) q.set('job_id', String(jobId))
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<AnalysisStatusResponse>(`/admin/analyze/status${suffix}`)
+  },
   runPipeline: (opts: { monitorDate?: string; ingestionSource?: 'fixtures' | 'erp' }) => {
     const q = new URLSearchParams()
     if (opts.monitorDate) q.set('monitor_date', opts.monitorDate)
