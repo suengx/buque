@@ -18,6 +18,8 @@ from buque.models.entities import (
     RiskType,
 )
 
+from buque.services.trigger_metric_labels import build_key_evidence
+
 CONFIDENCE_RULE = "规则解释"
 
 
@@ -106,7 +108,7 @@ class ExplanationRuleEngine:
         requires_human_confirm: bool = False,
     ) -> ExplanationPayload:
         metrics = trigger_metrics or {}
-        evidence = [f"触发规则: {trigger_rule}", str(metrics)]
+        evidence = build_key_evidence(trigger_rule, metrics)
 
         if relief_note:
             return ExplanationPayload(

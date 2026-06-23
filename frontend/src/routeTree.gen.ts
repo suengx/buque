@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as FeedbackIndexRouteImport } from './routes/feedback/index'
 import { Route as AlertsIndexRouteImport } from './routes/alerts/index'
-import { Route as AlertsSkuIdRouteImport } from './routes/alerts/$skuId'
 import { Route as SettingsRulesIndexRouteImport } from './routes/settings/rules/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -30,11 +29,6 @@ const AlertsIndexRoute = AlertsIndexRouteImport.update({
   path: '/alerts/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AlertsSkuIdRoute = AlertsSkuIdRouteImport.update({
-  id: '/alerts/$skuId',
-  path: '/alerts/$skuId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SettingsRulesIndexRoute = SettingsRulesIndexRouteImport.update({
   id: '/settings/rules/',
   path: '/settings/rules/',
@@ -43,14 +37,12 @@ const SettingsRulesIndexRoute = SettingsRulesIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/alerts/$skuId': typeof AlertsSkuIdRoute
   '/alerts/': typeof AlertsIndexRoute
   '/feedback/': typeof FeedbackIndexRoute
   '/settings/rules/': typeof SettingsRulesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/alerts/$skuId': typeof AlertsSkuIdRoute
   '/alerts': typeof AlertsIndexRoute
   '/feedback': typeof FeedbackIndexRoute
   '/settings/rules': typeof SettingsRulesIndexRoute
@@ -58,33 +50,20 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/alerts/$skuId': typeof AlertsSkuIdRoute
   '/alerts/': typeof AlertsIndexRoute
   '/feedback/': typeof FeedbackIndexRoute
   '/settings/rules/': typeof SettingsRulesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/alerts/$skuId'
-    | '/alerts/'
-    | '/feedback/'
-    | '/settings/rules/'
+  fullPaths: '/' | '/alerts/' | '/feedback/' | '/settings/rules/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/alerts/$skuId' | '/alerts' | '/feedback' | '/settings/rules'
-  id:
-    | '__root__'
-    | '/'
-    | '/alerts/$skuId'
-    | '/alerts/'
-    | '/feedback/'
-    | '/settings/rules/'
+  to: '/' | '/alerts' | '/feedback' | '/settings/rules'
+  id: '__root__' | '/' | '/alerts/' | '/feedback/' | '/settings/rules/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AlertsSkuIdRoute: typeof AlertsSkuIdRoute
   AlertsIndexRoute: typeof AlertsIndexRoute
   FeedbackIndexRoute: typeof FeedbackIndexRoute
   SettingsRulesIndexRoute: typeof SettingsRulesIndexRoute
@@ -113,13 +92,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlertsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/alerts/$skuId': {
-      id: '/alerts/$skuId'
-      path: '/alerts/$skuId'
-      fullPath: '/alerts/$skuId'
-      preLoaderRoute: typeof AlertsSkuIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/settings/rules/': {
       id: '/settings/rules/'
       path: '/settings/rules'
@@ -132,7 +104,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AlertsSkuIdRoute: AlertsSkuIdRoute,
   AlertsIndexRoute: AlertsIndexRoute,
   FeedbackIndexRoute: FeedbackIndexRoute,
   SettingsRulesIndexRoute: SettingsRulesIndexRoute,

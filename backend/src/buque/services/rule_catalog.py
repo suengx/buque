@@ -107,7 +107,7 @@ RULE_CATALOG: dict[str, RuleCatalogEntry] = {
     "KEY_SKU_UPGRADE": RuleCatalogEntry(
         "KEY_SKU_UPGRADE",
         "upgrade",
-        "重点链接在同等条件下预警上调一级",
+        "断货/滞销已触发时，对 dim_sku.is_key_listing=true 的 SKU 预警上调一级；参数「开启」才生效，SKU 标记由 focus_skus 或主数据维护",
         "bool",
     ),
     "SLOW_DOS_RED_REG": RuleCatalogEntry(

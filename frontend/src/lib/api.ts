@@ -81,11 +81,13 @@ export type SkuDetail = {
   warehouse: string | null
   risk_type: string
   risk_level: string
+  trigger_rule: string
   trigger_metrics: Record<string, unknown>
   dos: string | null
   primary_explanation: string | null
   secondary_explanation: string | null
   tertiary_explanation: string | null
+  explanation_tags: string[]
   key_evidence: string[]
   suggested_action: string | null
   responsible_role: string | null

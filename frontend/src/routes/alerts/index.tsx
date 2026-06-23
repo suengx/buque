@@ -5,6 +5,7 @@ import { BarChart3, CircleAlert, OctagonAlert, TriangleAlert } from 'lucide-reac
 import { api, queryKeys } from '#/lib/api'
 import { RISK_LEVEL_LABEL, riskTypeLabel } from '#/lib/labels'
 import { useSnapshot } from '#/context/SnapshotContext'
+import { AlertDetailModal, type AlertDetailTarget } from '#/components/buque/AlertDetailModal'
 import { AlertsTable } from '#/components/buque/AlertsTable'
 import { CategoryDistribution } from '#/components/buque/CategoryDistribution'
 import { FilterBar, type FilterValues } from '#/components/buque/FilterBar'
@@ -46,6 +47,7 @@ function AlertsPage() {
   const navigate = useNavigate({ from: '/alerts/' })
   const search = Route.useSearch()
   const { selectedSnapshotId } = useSnapshot()
+  const [detailTarget, setDetailTarget] = useState<AlertDetailTarget | null>(null)
   const [draft, setDraft] = useState<FilterValues>({
     level: search.level,
     risk_type: search.risk_type,
@@ -188,6 +190,7 @@ function AlertsPage() {
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={(page) => navigate({ search: { ...search, page } })}
+          onViewDetail={setDetailTarget}
         />
         <div className="flex flex-col gap-3">
           {analytics ? (
@@ -211,6 +214,8 @@ function AlertsPage() {
           ) : null}
         </div>
       </div>
+
+      <AlertDetailModal target={detailTarget} onClose={() => setDetailTarget(null)} />
     </div>
   )
 }

@@ -92,11 +92,13 @@ class SkuDetailOut(BaseModel):
     warehouse: str | None
     risk_type: str
     risk_level: str
+    trigger_rule: str
     trigger_metrics: dict
     dos: Decimal | None
     primary_explanation: str | None
     secondary_explanation: str | None
     tertiary_explanation: str | None
+    explanation_tags: list[str] = []
     key_evidence: list
     suggested_action: str | None
     responsible_role: str | None

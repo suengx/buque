@@ -1,9 +1,9 @@
-import { Link } from '@tanstack/react-router'
 import type { MonitorResult, PaginatedAlerts } from '#/lib/api'
 import { riskTypeLabel } from '#/lib/labels'
 import { EmptyState } from '#/components/buque/EmptyState'
 import { RiskBadge } from '#/components/buque/RiskBadge'
 import { StatusDot } from '#/components/buque/StatusDot'
+import type { AlertDetailTarget } from '#/components/buque/AlertDetailModal'
 
 type Props = {
   data: PaginatedAlerts | undefined
@@ -12,6 +12,7 @@ type Props = {
   currentPage: number
   totalPages: number
   onPageChange: (page: number) => void
+  onViewDetail: (target: AlertDetailTarget) => void
 }
 
 function formatDos(dos: string | null) {
@@ -27,6 +28,7 @@ export function AlertsTable({
   currentPage,
   totalPages,
   onPageChange,
+  onViewDetail,
 }: Props) {
   return (
     <section className="buque-table-panel min-w-0">
@@ -64,7 +66,7 @@ export function AlertsTable({
                   </tr>
                 ) : (
                   data.items.map((row: MonitorResult) => (
-                    <AlertRow key={row.id} row={row} />
+                    <AlertRow key={row.id} row={row} onViewDetail={onViewDetail} />
                   ))
                 )}
               </tbody>
@@ -100,9 +102,22 @@ export function AlertsTable({
   )
 }
 
-function AlertRow({ row }: { row: MonitorResult }) {
+function AlertRow({
+  row,
+  onViewDetail,
+}: {
+  row: MonitorResult
+  onViewDetail: (target: AlertDetailTarget) => void
+}) {
+  const openDetail = () =>
+    onViewDetail({
+      sku: row.sku,
+      warehouse: row.warehouse ?? undefined,
+      productName: row.product_name,
+    })
+
   return (
-    <tr>
+    <tr className="buque-alerts-row-clickable" onClick={openDetail}>
       <td className="whitespace-nowrap text-xs text-[var(--sea-ink-soft)]">{row.date}</td>
       <td className="min-w-[140px]">
         <div className="font-medium text-[var(--sea-ink)]">{row.sku}</div>
@@ -123,14 +138,16 @@ function AlertRow({ row }: { row: MonitorResult }) {
         <StatusDot status={row.handling_status} />
       </td>
       <td className="whitespace-nowrap">
-        <Link
-          to="/alerts/$skuId"
-          params={{ skuId: row.sku }}
-          search={{ warehouse: row.warehouse ?? undefined }}
-          className="text-sm font-medium text-[var(--aqua)] no-underline hover:underline"
+        <button
+          type="button"
+          className="text-sm font-medium text-[var(--aqua)]"
+          onClick={(e) => {
+            e.stopPropagation()
+            openDetail()
+          }}
         >
           查看详情
-        </Link>
+        </button>
       </td>
     </tr>
   )
