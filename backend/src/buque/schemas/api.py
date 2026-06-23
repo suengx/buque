@@ -95,6 +95,8 @@ class SkuDetailOut(BaseModel):
     trigger_rule: str
     trigger_metrics: dict
     dos: Decimal | None
+    ref_daily_sales: Decimal | None
+    available_inventory: int | None
     primary_explanation: str | None
     secondary_explanation: str | None
     tertiary_explanation: str | None

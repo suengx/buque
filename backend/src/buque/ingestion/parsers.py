@@ -226,8 +226,11 @@ class OrdersParser:
             df["order_date"] = self.monitor_date
 
         count = 0
+        group_cols = ["order_date", "msku", "channel"]
+        if "warehouse" in df.columns:
+            group_cols.append("warehouse")
         grouped = (
-            df.groupby(["order_date", "msku", "channel"], dropna=False)
+            df.groupby(group_cols, dropna=False)
             .agg({"order_qty": "sum"})
             .reset_index()
         )
@@ -236,6 +239,7 @@ class OrdersParser:
             channel = str(row["channel"]).strip()
             order_date = row["order_date"]
             sku = _resolve_sku(self.db, msku, channel)
+            wh = str(row["warehouse"]).strip() if "warehouse" in row and pd.notna(row.get("warehouse")) else None
             self.db.add(
                 FactSalesDaily(
                     snapshot_id=self.snapshot_id,
@@ -243,6 +247,7 @@ class OrdersParser:
                     msku=msku,
                     channel=channel,
                     sku=sku,
+                    warehouse=wh,
                     order_qty=int(row.get("order_qty", 0) or 0),
                 )
             )

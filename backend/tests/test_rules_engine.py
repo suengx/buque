@@ -46,7 +46,13 @@ SNAPSHOT_ID = 1
 @pytest.fixture
 def db_session() -> Session:
     engine = create_engine("sqlite:///:memory:")
-    for table in (ErpSyncJob.__table__, DimSku.__table__, FactInventoryDaily.__table__):
+    for table in (
+        ErpSyncJob.__table__,
+        DimSku.__table__,
+        FactInventoryDaily.__table__,
+        FactSalesDaily.__table__,
+        RuleConfig.__table__,
+    ):
         table.create(engine, checkfirst=True)
     factory = sessionmaker(bind=engine)
     session = factory()
@@ -57,6 +63,19 @@ def db_session() -> Session:
             job_kind=JobKind.PIPELINE,
             phase=ErpSyncPhase.DONE,
             status=IngestionStatus.SUCCESS,
+        )
+    )
+    session.add(
+        RuleConfig(
+            rule_code="BASE_SALES_PRIORITY",
+            rule_name="BASE_SALES_PRIORITY",
+            param_value="ERP_7D_AVG",
+            param_type="string",
+            is_enabled=True,
+            version=1,
+            effective_date=date(2026, 6, 22),
+            proposer="test",
+            change_reason="test",
         )
     )
     session.add(DimSku(sku="NAN-SKU", product_name="Test"))
@@ -97,6 +116,7 @@ def test_stockout_orange_factor_from_config(db_session: Session) -> None:
         ("SLOW_ORANGE_FACTOR", "0.85", "float"),
         ("SLOW_YELLOW_FACTOR", "0.7", "float"),
         ("SALES_SURGE_RATIO", "1.5", "float"),
+        ("SALES_SPIKE_TRIM", "false", "bool"),
         ("KEY_SKU_UPGRADE", "false", "bool"),
         ("INBOUND_RELIEF_DOWNGRADE", "false", "bool"),
     )

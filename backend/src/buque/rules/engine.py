@@ -16,6 +16,14 @@ from buque.models.entities import (
     RiskLevel,
     RiskType,
 )
+from buque.services.dos_judgment import (
+    _slow_base_level,
+    _stockout_base_level,
+    build_sales_judgment,
+    build_slow_judgment,
+    build_stockout_judgment,
+)
+from buque.services.ref_daily_sales import SUPPORTED_SALES_PRIORITY, resolve_ref_daily_sales
 from buque.services.rule_config import RuleConfigService
 
 ZERO = Decimal("0")
@@ -74,6 +82,38 @@ class MonitorFinding:
     requires_human_confirm: bool = False
 
 
+def _dos_trigger_metrics(
+    *,
+    dos: Decimal,
+    threshold_red: int,
+    threshold_orange: float,
+    threshold_yellow: float,
+    available: int,
+    erp_ref: Decimal | None,
+    effective_ref: Decimal,
+    ref_source: str,
+    trim_applied: bool,
+    sales_metrics: dict,
+    judgment: dict,
+) -> dict:
+    s3 = sales_metrics.get("sales_3d_avg", ZERO)
+    s15 = sales_metrics.get("sales_15d_avg", ZERO)
+    return {
+        "judgment": judgment,
+        "available_inventory": available,
+        "erp_ref_daily_sales": float(erp_ref) if erp_ref is not None else None,
+        "ref_daily_sales": float(effective_ref),
+        "ref_sales_source": ref_source,
+        "sales_spike_trim_applied": trim_applied,
+        "dos": float(dos),
+        "threshold_red": threshold_red,
+        "threshold_orange": threshold_orange,
+        "threshold_yellow": threshold_yellow,
+        "sales_3d_avg": float(s3),
+        "sales_15d_avg": float(s15),
+    }
+
+
 class RuleEngine:
     def __init__(
         self,
@@ -103,7 +143,37 @@ class RuleEngine:
         )
         findings: list[MonitorFinding] = []
         for inv, sku in rows:
-            if not _valid_sales(inv.ref_daily_sales):
+            sales_metrics = self._sales_metrics(
+                inv.sku, inv.warehouse, MonitoringScope.WAREHOUSE
+            )
+            priority = self.cfg.get_str("BASE_SALES_PRIORITY", "ERP_7D_AVG").strip()
+            if priority not in SUPPORTED_SALES_PRIORITY:
+                findings.append(
+                    MonitorFinding(
+                        sku=inv.sku,
+                        warehouse=inv.warehouse,
+                        channel=None,
+                        scope=MonitoringScope.WAREHOUSE,
+                        risk_type=RiskType.DATA_ANOMALY,
+                        risk_level=RiskLevel.ORANGE,
+                        trigger_rule="MISSING_DATA_BLOCK",
+                        trigger_metrics={
+                            "field": "BASE_SALES_PRIORITY",
+                            "ref_sales_source": priority,
+                        },
+                        dos=None,
+                        ref_daily_sales=_dec(inv.ref_daily_sales),
+                        available_inventory=inv.available_inventory,
+                        requires_explanation=False,
+                    )
+                )
+                continue
+
+            erp_ref = _dec(inv.ref_daily_sales)
+            ref, source, trimmed = resolve_ref_daily_sales(
+                erp_ref, sales_metrics, self.cfg
+            )
+            if not _valid_sales(ref):
                 findings.append(
                     MonitorFinding(
                         sku=inv.sku,
@@ -115,15 +185,14 @@ class RuleEngine:
                         trigger_rule="MISSING_DATA_BLOCK",
                         trigger_metrics={"field": "ref_daily_sales"},
                         dos=None,
-                        ref_daily_sales=_dec(inv.ref_daily_sales),
+                        ref_daily_sales=erp_ref,
                         available_inventory=inv.available_inventory,
                         requires_explanation=False,
                     )
                 )
                 continue
 
-            dos = Decimal(inv.available_inventory) / Decimal(inv.ref_daily_sales)
-            sales_metrics = self._sales_metrics(inv.sku, inv.warehouse, MonitoringScope.WAREHOUSE)
+            dos = Decimal(inv.available_inventory) / ref
             findings.extend(
                 self._stockout_and_slow(
                     sku=inv.sku,
@@ -131,7 +200,10 @@ class RuleEngine:
                     seasonality=sku.seasonality,
                     is_key=sku.is_key_listing,
                     dos=dos,
-                    ref_daily_sales=_dec(inv.ref_daily_sales),
+                    erp_ref=erp_ref,
+                    ref_daily_sales=ref,
+                    ref_source=source,
+                    trim_applied=trimmed,
                     available=inv.available_inventory,
                     sales_metrics=sales_metrics,
                 )
@@ -143,7 +215,7 @@ class RuleEngine:
                     scope=MonitoringScope.WAREHOUSE,
                     sales_metrics=sales_metrics,
                     dos=dos,
-                    ref_daily_sales=_dec(inv.ref_daily_sales),
+                    ref_daily_sales=ref,
                     available=inv.available_inventory,
                 )
             )
@@ -163,11 +235,12 @@ class RuleEngine:
             if not sku:
                 continue
             total_avail = sum(r.available_inventory for r in rows)
-            ref_sales = sum(
-                _dec(r.ref_daily_sales) or Decimal(0)
-                for r in rows
-                if _valid_sales(r.ref_daily_sales)
-            )
+            ref_sales = ZERO
+            for r in rows:
+                sm = self._sales_metrics(r.sku, r.warehouse, MonitoringScope.WAREHOUSE)
+                resolved, _, _ = resolve_ref_daily_sales(_dec(r.ref_daily_sales), sm, self.cfg)
+                if _valid_sales(resolved):
+                    ref_sales += resolved
             if not _valid_sales(ref_sales):
                 continue
             dos = Decimal(total_avail) / ref_sales
@@ -179,7 +252,10 @@ class RuleEngine:
                     seasonality=sku.seasonality,
                     is_key=sku.is_key_listing,
                     dos=dos,
+                    erp_ref=None,
                     ref_daily_sales=ref_sales,
+                    ref_source=self.cfg.get_str("BASE_SALES_PRIORITY", "ERP_7D_AVG"),
+                    trim_applied=False,
                     available=total_avail,
                     sales_metrics=sales_metrics,
                     scope=MonitoringScope.GLOBAL,
@@ -222,7 +298,7 @@ class RuleEngine:
             dos = Decimal(total_avail) / avg_daily if avg_daily > 0 else None
             if dos is None:
                 continue
-            sales_metrics = self._sales_metrics(sku_code, channel, MonitoringScope.CHANNEL)
+            sales_metrics = self._sales_metrics(sku_code, None, MonitoringScope.CHANNEL, channel=channel)
             findings.extend(
                 self._sales_anomaly(
                     sku=sku_code,
@@ -238,15 +314,21 @@ class RuleEngine:
         return findings
 
     def _sales_metrics(
-        self, sku: str, warehouse: str | None, scope: MonitoringScope
+        self,
+        sku: str,
+        warehouse: str | None,
+        scope: MonitoringScope,
+        channel: str | None = None,
     ) -> dict[str, Decimal]:
         q = self.db.query(FactSalesDaily).filter(
             FactSalesDaily.snapshot_id == self.snapshot_id,
             FactSalesDaily.date <= self.monitor_date,
             FactSalesDaily.sku == sku,
         )
-        if scope == MonitoringScope.CHANNEL and warehouse:
-            q = q.filter(FactSalesDaily.channel == warehouse)
+        if scope == MonitoringScope.WAREHOUSE and warehouse:
+            q = q.filter(FactSalesDaily.warehouse == warehouse)
+        elif scope == MonitoringScope.CHANNEL and channel:
+            q = q.filter(FactSalesDaily.channel == channel)
         rows = q.order_by(FactSalesDaily.date.desc()).limit(30).all()
         if not rows:
             return {"sales_3d_avg": ZERO, "sales_15d_avg": ZERO}
@@ -269,7 +351,10 @@ class RuleEngine:
         seasonality: str | None,
         is_key: bool,
         dos: Decimal,
+        erp_ref: Decimal | None,
         ref_daily_sales: Decimal,
+        ref_source: str,
+        trim_applied: bool,
         available: int,
         sales_metrics: dict,
         scope: MonitoringScope = MonitoringScope.WAREHOUSE,
@@ -284,18 +369,25 @@ class RuleEngine:
         slow_yellow_factor = Decimal(str(self.cfg.get_float("SLOW_YELLOW_FACTOR", 0.7)))
 
         # 断货
-        stockout_level = RiskLevel.GREEN
-        if dos <= stockout_red:
-            stockout_level = RiskLevel.RED
-        elif dos <= stockout_red * stockout_orange_factor:
-            stockout_level = RiskLevel.ORANGE
-        elif dos <= stockout_red * stockout_yellow_factor:
-            stockout_level = RiskLevel.YELLOW
+        stockout_base = _stockout_base_level(
+            dos, stockout_red, stockout_orange_factor, stockout_yellow_factor
+        )
+        stockout_level = stockout_base
+        stockout_modifiers: list[dict] = []
 
         s3 = sales_metrics.get("sales_3d_avg", ZERO)
         s15 = sales_metrics.get("sales_15d_avg", ZERO)
         if s15 > 0 and s3 >= s15 * Decimal(str(surge_ratio)):
+            prev = stockout_level
             stockout_level = _upgrade(stockout_level, 1)
+            stockout_modifiers.append(
+                {
+                    "rule": "SALES_SURGE_RATIO",
+                    "label": "销量突增升一档",
+                    "from_level": prev.value,
+                    "to_level": stockout_level.value,
+                }
+            )
 
         relief_applied = False
         relief_note = None
@@ -306,12 +398,33 @@ class RuleEngine:
             and warehouse
         ):
             if self._inbound_can_relief(sku, warehouse, dos, ref_daily_sales, available):
+                prev = stockout_level
                 stockout_level = RiskLevel.ORANGE
                 relief_applied = True
                 relief_note = "需关注到货兑现"
+                stockout_modifiers.append(
+                    {
+                        "rule": "INBOUND_RELIEF_DOWNGRADE",
+                        "label": "在途缓释降一档",
+                        "from_level": prev.value,
+                        "to_level": stockout_level.value,
+                    }
+                )
 
         if self.cfg.get_bool("KEY_SKU_UPGRADE") and is_key and stockout_level != RiskLevel.GREEN:
+            prev = stockout_level
             stockout_level = _upgrade(stockout_level, 1)
+            stockout_modifiers.append(
+                {
+                    "rule": "KEY_SKU_UPGRADE",
+                    "label": "重点链接升一档",
+                    "from_level": prev.value,
+                    "to_level": stockout_level.value,
+                }
+            )
+
+        stockout_orange_days = float(Decimal(stockout_red) * stockout_orange_factor)
+        stockout_yellow_days = float(Decimal(stockout_red) * stockout_yellow_factor)
 
         if stockout_level != RiskLevel.GREEN:
             findings.append(
@@ -323,12 +436,27 @@ class RuleEngine:
                     risk_type=RiskType.STOCKOUT,
                     risk_level=stockout_level,
                     trigger_rule="DOS_STOCKOUT",
-                    trigger_metrics={
-                        "dos": float(dos),
-                        "threshold_red": stockout_red,
-                        "sales_3d_avg": float(s3),
-                        "sales_15d_avg": float(s15),
-                    },
+                    trigger_metrics=_dos_trigger_metrics(
+                        dos=dos,
+                        threshold_red=stockout_red,
+                        threshold_orange=stockout_orange_days,
+                        threshold_yellow=stockout_yellow_days,
+                        available=available,
+                        erp_ref=erp_ref,
+                        effective_ref=ref_daily_sales,
+                        ref_source=ref_source,
+                        trim_applied=trim_applied,
+                        sales_metrics=sales_metrics,
+                        judgment=build_stockout_judgment(
+                            dos=dos,
+                            threshold_red=stockout_red,
+                            orange_factor=stockout_orange_factor,
+                            yellow_factor=stockout_yellow_factor,
+                            base_level=stockout_base,
+                            final_level=stockout_level,
+                            modifiers=stockout_modifiers,
+                        ),
+                    ),
                     dos=dos,
                     ref_daily_sales=ref_daily_sales,
                     available_inventory=available,
@@ -340,13 +468,10 @@ class RuleEngine:
             )
 
         # 滞销
-        slow_level = RiskLevel.GREEN
-        if dos >= slow_red:
-            slow_level = RiskLevel.RED
-        elif dos >= slow_red * slow_orange_factor:
-            slow_level = RiskLevel.ORANGE
-        elif dos >= slow_red * slow_yellow_factor:
-            slow_level = RiskLevel.YELLOW
+        slow_base = _slow_base_level(dos, slow_red, slow_orange_factor, slow_yellow_factor)
+        slow_level = slow_base
+        slow_orange_days = float(Decimal(slow_red) * slow_orange_factor)
+        slow_yellow_days = float(Decimal(slow_red) * slow_yellow_factor)
 
         if slow_level != RiskLevel.GREEN:
             findings.append(
@@ -358,7 +483,27 @@ class RuleEngine:
                     risk_type=RiskType.SLOW_MOVING,
                     risk_level=slow_level,
                     trigger_rule="DOS_SLOW_MOVING",
-                    trigger_metrics={"dos": float(dos), "threshold_red": slow_red},
+                    trigger_metrics=_dos_trigger_metrics(
+                        dos=dos,
+                        threshold_red=slow_red,
+                        threshold_orange=slow_orange_days,
+                        threshold_yellow=slow_yellow_days,
+                        available=available,
+                        erp_ref=erp_ref,
+                        effective_ref=ref_daily_sales,
+                        ref_source=ref_source,
+                        trim_applied=trim_applied,
+                        sales_metrics=sales_metrics,
+                        judgment=build_slow_judgment(
+                            dos=dos,
+                            threshold_red=slow_red,
+                            orange_factor=slow_orange_factor,
+                            yellow_factor=slow_yellow_factor,
+                            base_level=slow_base,
+                            final_level=slow_level,
+                            modifiers=[],
+                        ),
+                    ),
                     dos=dos,
                     ref_daily_sales=ref_daily_sales,
                     available_inventory=available,
@@ -398,6 +543,17 @@ class RuleEngine:
         if level == RiskLevel.GREEN:
             return []
 
+        ratio = float(s3 / s15) if s15 else None
+        judgment = build_sales_judgment(
+            rule=rule,
+            s3=float(s3),
+            s15=float(s15),
+            ratio=ratio or 0.0,
+            drop_ratio=drop_ratio,
+            surge_ratio=surge_ratio,
+            final_level=level,
+        )
+
         return [
             MonitorFinding(
                 sku=sku,
@@ -408,9 +564,13 @@ class RuleEngine:
                 risk_level=level,
                 trigger_rule=rule,
                 trigger_metrics={
+                    "judgment": judgment,
                     "sales_3d_avg": float(s3),
                     "sales_15d_avg": float(s15),
-                    "ratio": float(s3 / s15) if s15 else None,
+                    "ratio": ratio,
+                    "dos": float(dos),
+                    "available_inventory": available,
+                    "ref_daily_sales": float(ref_daily_sales),
                 },
                 dos=dos,
                 ref_daily_sales=ref_daily_sales,

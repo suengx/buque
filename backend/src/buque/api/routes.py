@@ -415,6 +415,8 @@ def sku_detail(
         trigger_rule=result.trigger_rule,
         trigger_metrics=result.trigger_metrics or {},
         dos=result.dos,
+        ref_daily_sales=result.ref_daily_sales,
+        available_inventory=result.available_inventory,
         primary_explanation=explain.primary_explanation if explain else None,
         secondary_explanation=explain.secondary_explanation if explain else None,
         tertiary_explanation=explain.tertiary_explanation if explain else None,

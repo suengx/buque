@@ -84,6 +84,8 @@ export type SkuDetail = {
   trigger_rule: string
   trigger_metrics: Record<string, unknown>
   dos: string | null
+  ref_daily_sales: string | null
+  available_inventory: number | null
   primary_explanation: string | null
   secondary_explanation: string | null
   tertiary_explanation: string | null

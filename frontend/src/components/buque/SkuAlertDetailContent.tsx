@@ -134,7 +134,10 @@ export function SkuAlertDetailContent({ sku, warehouse }: Props) {
             <h2 className="demo-section-title mb-3">触发证据</h2>
             <TriggerMetricsGrid
               triggerRule={data.trigger_rule}
+              riskLevel={data.risk_level}
               metrics={data.trigger_metrics}
+              availableInventory={data.available_inventory}
+              refDailySales={data.ref_daily_sales != null ? Number(data.ref_daily_sales) : null}
             />
           </GlassCard>
 
