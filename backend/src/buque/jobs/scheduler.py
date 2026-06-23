@@ -5,12 +5,13 @@ import os
 from datetime import date
 
 from apscheduler.schedulers.blocking import BlockingScheduler
-from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
 from buque.config import get_settings
 from buque.db import SessionLocal
-from buque.services.sync_pipeline import run_analysis_pipeline, run_sync_ingestion
+from buque.services.monitor_pipeline import run_analysis_pipeline
+from buque.services.schedule_config import daily_pipeline_trigger, schedule_label
+from buque.services.sync_pipeline import run_sync_ingestion
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -46,11 +47,11 @@ def start_scheduler() -> None:
     scheduler = BlockingScheduler(timezone=str(settings.tz))
     scheduler.add_job(
         run_daily_pipeline,
-        CronTrigger(hour=6, minute=0, timezone=settings.tz),
+        daily_pipeline_trigger(settings.tz),
         id="buque_daily_pipeline",
         replace_existing=True,
     )
-    logger.info("调度器已启动 Asia/Shanghai 06:00 日批")
+    logger.info("调度器已启动 %s 日批", schedule_label())
     scheduler.start()
 
 

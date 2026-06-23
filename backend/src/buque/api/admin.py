@@ -16,6 +16,7 @@ from buque.schemas.api import (
     ErpSyncLatestResponse,
     ErpSyncRequest,
     ErpSyncStatusResponse,
+    OpsStatusResponse,
     PipelineRunResult,
 )
 from buque.services.erp_sync_job import (
@@ -27,6 +28,7 @@ from buque.services.erp_sync_job import (
     has_running_analysis_job,
     has_running_sync_job,
 )
+from buque.services.ops_status import build_ops_status
 from buque.services.sync_pipeline import run_analysis_job, run_full_pipeline, run_sync_job
 
 logger = logging.getLogger(__name__)
@@ -80,6 +82,15 @@ def erp_sync_status(
 ) -> ErpSyncStatusResponse:
     md = monitor_date or date.today()
     return build_sync_status(db, md, job_id=job_id)
+
+
+@router.get("/ops/status", response_model=OpsStatusResponse)
+def ops_status(
+    monitor_date: date | None = None,
+    db: Session = Depends(get_db),
+) -> OpsStatusResponse:
+    md = monitor_date or date.today()
+    return build_ops_status(db, md)
 
 
 @router.get("/sync/latest", response_model=ErpSyncLatestResponse)

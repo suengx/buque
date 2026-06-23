@@ -6,8 +6,9 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { MonitorDateProvider } from '../context/MonitorDateContext'
 import AppSidebar from '../components/buque/AppSidebar'
-import { ThemeInit } from '../components/ThemeInit'
+import { ContextDock } from '../components/buque/ContextDock'
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 import appCss from '../styles.css?url'
 import type { QueryClient } from '@tanstack/react-query'
@@ -30,21 +31,22 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 function RootDocument() {
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang="zh-CN" data-theme="light" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body className="font-sans antialiased">
-        <ThemeInit />
-        <AppSidebar />
-        <main className="min-h-screen pl-64">
-          <header className="border-b border-[var(--line)] bg-[var(--header-bg)] px-8 py-4 backdrop-blur">
-            <div className="text-sm text-[var(--sea-ink-soft)]">Smarter inventory, Stronger growth</div>
-          </header>
-          <div className="p-8">
-            <Outlet />
-          </div>
-        </main>
+        <MonitorDateProvider>
+          <AppSidebar />
+          <main className="min-h-screen pl-60">
+            <ContextDock />
+            <div className="px-6 py-5">
+              <div className="page-content">
+                <Outlet />
+              </div>
+            </div>
+          </main>
+        </MonitorDateProvider>
         <TanStackDevtools
           config={{ position: 'bottom-right' }}
           plugins={[

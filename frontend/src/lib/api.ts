@@ -69,6 +69,19 @@ export type SkuDetail = {
   require_human_confirm: boolean
 }
 
+export type AgentExplainResult = {
+  primary_explanation: string
+  secondary_explanation: string | null
+  tertiary_explanation: string | null
+  explanation_tags: string[]
+  key_evidence: string[]
+  suggested_action: string
+  responsible_role: string | null
+  action_deadline: string | null
+  require_human_confirm: boolean
+  confidence_note: string | null
+}
+
 export type FeedbackStats = {
   total: number
   adopted: number
@@ -109,6 +122,20 @@ export type ErpSyncLatestResponse = {
   sync_summary: Record<string, unknown> | null
 }
 
+export type OpsStatusResponse = {
+  monitor_date: string
+  timezone: string
+  schedule_label: string
+  next_scheduled_at: string
+  pipeline_active: boolean
+  sync_running: boolean
+  analysis_running: boolean
+  sync_phase_message: string | null
+  analysis_phase_message: string | null
+  erp_configured: boolean
+  latest_sync: ErpSyncLatestResponse
+}
+
 export type AnalysisStatusResponse = {
   monitor_date: string
   running: boolean
@@ -136,6 +163,20 @@ export type ErpSyncAccepted = {
   message: string
 }
 
+export type ReportAnalytics = {
+  monitor_date: string
+  level_counts: Record<string, number>
+  type_counts: Record<string, number>
+  trend_7d: { date: string; red: number; orange: number; yellow: number; green: number }[]
+  top_priority: MonitorResult[]
+}
+
+export type AlertsMeta = {
+  monitor_date: string
+  warehouses: string[]
+  type_counts: Record<string, number>
+}
+
 export type PipelineRunResult = {
   monitor_date: string
   ingestion: Record<string, number>
@@ -148,6 +189,10 @@ export type PipelineRunResult = {
 export const api = {
   dailyReport: (date?: string) =>
     request<DailyReportSummary>(`/reports/daily${date ? `?monitor_date=${date}` : ''}`),
+  reportAnalytics: (date?: string) =>
+    request<ReportAnalytics>(`/reports/analytics${date ? `?monitor_date=${date}` : ''}`),
+  alertsMeta: (date?: string) =>
+    request<AlertsMeta>(`/alerts/meta${date ? `?monitor_date=${date}` : ''}`),
   alerts: (params: Record<string, string | number>) => {
     const q = new URLSearchParams()
     Object.entries(params).forEach(([k, v]) => q.set(k, String(v)))
@@ -157,6 +202,15 @@ export const api = {
     request<SkuDetail>(
       `/alerts/${sku}${warehouse ? `?warehouse=${encodeURIComponent(warehouse)}` : ''}`,
     ),
+  agentExplainSku: (sku: string, opts?: { warehouse?: string; monitorDate?: string }) => {
+    const q = new URLSearchParams()
+    if (opts?.warehouse) q.set('warehouse', opts.warehouse)
+    if (opts?.monitorDate) q.set('monitor_date', opts.monitorDate)
+    const suffix = q.toString() ? `?${q}` : ''
+    return request<AgentExplainResult>(`/alerts/${encodeURIComponent(sku)}/agent-explain${suffix}`, {
+      method: 'POST',
+    })
+  },
   createFeedback: (body: Record<string, unknown>) =>
     request('/feedback', { method: 'POST', body: JSON.stringify(body) }),
   feedbackStats: () => request<FeedbackStats>('/feedback/stats'),
@@ -177,6 +231,10 @@ export const api = {
   getErpSyncLatest: (monitorDate?: string) => {
     const q = monitorDate ? `?monitor_date=${monitorDate}` : ''
     return request<ErpSyncLatestResponse>(`/admin/sync/latest${q}`)
+  },
+  getOpsStatus: (monitorDate?: string) => {
+    const q = monitorDate ? `?monitor_date=${monitorDate}` : ''
+    return request<OpsStatusResponse>(`/admin/ops/status${q}`)
   },
   startAnalysis: (opts: { monitorDate?: string }) =>
     request<AnalysisAccepted>('/admin/analyze', {
@@ -200,7 +258,10 @@ export const api = {
 
 export const queryKeys = {
   dailyReport: (date?: string) => ['dailyReport', date] as const,
+  reportAnalytics: (date?: string) => ['reportAnalytics', date] as const,
+  alertsMeta: (date?: string) => ['alertsMeta', date] as const,
   alerts: (params: Record<string, string | number>) => ['alerts', params] as const,
   skuDetail: (sku: string, warehouse?: string) => ['skuDetail', sku, warehouse] as const,
   feedbackStats: ['feedbackStats'] as const,
+  opsStatus: (date?: string) => ['opsStatus', date] as const,
 }

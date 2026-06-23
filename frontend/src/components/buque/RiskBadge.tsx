@@ -29,7 +29,7 @@ export function GlassCard({
   children: React.ReactNode
   className?: string
 }) {
-  return <div className={cn('demo-card', className)}>{children}</div>
+  return <div className={cn('buque-panel-flat', className)}>{children}</div>
 }
 
 export function StatCard({

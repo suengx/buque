@@ -1,23 +1,40 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, queryKeys } from '#/lib/api'
-import { GlassCard, StatCard } from '#/components/buque/RiskBadge'
+import { riskTypeLabel } from '#/lib/labels'
+import { MetricCard } from '#/components/buque/MetricCard'
+import { PageHeader } from '#/components/buque/PageHeader'
+
+type FeedbackSearch = {
+  sku?: string
+  risk_type?: string
+}
 
 export const Route = createFileRoute('/feedback/')({
+  validateSearch: (search: Record<string, unknown>): FeedbackSearch => ({
+    sku: (search.sku as string) || undefined,
+    risk_type: (search.risk_type as string) || undefined,
+  }),
   component: FeedbackPage,
 })
 
 function FeedbackPage() {
+  const search = Route.useSearch()
   const qc = useQueryClient()
   const { data: stats } = useQuery({
     queryKey: queryKeys.feedbackStats,
     queryFn: () => api.feedbackStats(),
   })
-  const [sku, setSku] = useState('')
-  const [riskType, setRiskType] = useState('STOCKOUT')
+  const [sku, setSku] = useState(search.sku ?? '')
+  const [riskType, setRiskType] = useState(search.risk_type ?? 'STOCKOUT')
   const [decision, setDecision] = useState('ADOPTED')
   const [remark, setRemark] = useState('')
+
+  useEffect(() => {
+    if (search.sku) setSku(search.sku)
+    if (search.risk_type) setRiskType(search.risk_type)
+  }, [search.sku, search.risk_type])
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -35,18 +52,26 @@ function FeedbackPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="demo-title text-2xl">人工反馈</h1>
-        <p className="text-sm demo-muted">记录采纳 / 驳回 / 部分采纳</p>
+    <div className="buque-page-stack">
+      <PageHeader
+        title="人工反馈"
+        subtitle="记录采纳、驳回与部分采纳"
+        tooltip="反馈用于二期学习闭环；一期留痕即可。"
+      />
+
+      <div className="buque-metric-grid buque-metric-grid-4">
+        <MetricCard title="反馈总数" value={stats?.total ?? 0} accent="neutral" />
+        <MetricCard title="采纳" value={stats?.adopted ?? 0} accent="green" />
+        <MetricCard title="驳回" value={stats?.rejected ?? 0} accent="red" />
+        <MetricCard
+          title="采纳率"
+          value={`${((stats?.adoption_rate ?? 0) * 100).toFixed(1)}%`}
+          accent="neutral"
+        />
       </div>
-      <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard title="反馈总数" value={stats?.total ?? 0} />
-        <StatCard title="采纳" value={stats?.adopted ?? 0} />
-        <StatCard title="驳回" value={stats?.rejected ?? 0} />
-        <StatCard title="采纳率" value={`${((stats?.adoption_rate ?? 0) * 100).toFixed(1)}%`} />
-      </div>
-      <GlassCard className="max-w-xl space-y-4">
+
+      <div className="buque-panel-flat max-w-lg space-y-4">
+        <h2 className="text-base font-semibold text-[var(--sea-ink)]">提交反馈</h2>
         <input
           className="demo-input"
           placeholder="SKU"
@@ -76,7 +101,12 @@ function FeedbackPage() {
         >
           提交反馈
         </button>
-      </GlassCard>
+        {sku ? (
+          <p className="text-xs text-[var(--sea-ink-soft)]">
+            当前：{sku} · {riskTypeLabel(riskType)}
+          </p>
+        ) : null}
+      </div>
     </div>
   )
 }

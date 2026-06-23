@@ -17,6 +17,8 @@ from buque.models.entities import (
     RiskType,
 )
 from buque.schemas.api import (
+    AgentExplainOut,
+    AlertsMetaOut,
     DailyReportSummary,
     FeedbackCreate,
     FeedbackOut,
@@ -24,14 +26,51 @@ from buque.schemas.api import (
     MonitorResultOut,
     PaginatedAlerts,
     PipelineRunResult,
+    ReportAnalyticsOut,
     SkuDetailOut,
+    TrendPoint,
 )
+from buque.services.monitor_pipeline import ExplainerAgent
 
 router = APIRouter(prefix="/api/v1")
 
 
 def _latest_monitor_date(db: Session) -> date | None:
     return db.query(func.max(FactMonitorResult.date)).scalar()
+
+
+def _explain_for(db: Session, md: date, sku: str) -> FactAgentExplain | None:
+    return (
+        db.query(FactAgentExplain)
+        .filter(FactAgentExplain.date == md, FactAgentExplain.sku == sku)
+        .order_by(FactAgentExplain.id.desc())
+        .first()
+    )
+
+
+def _result_to_out(result: FactMonitorResult, sku: DimSku | None, explain: FactAgentExplain | None) -> MonitorResultOut:
+    return MonitorResultOut(
+        id=result.id,
+        date=result.date,
+        sku=result.sku,
+        product_name=sku.product_name if sku else None,
+        warehouse=result.warehouse,
+        channel=result.channel,
+        scope=result.scope.value,
+        risk_type=result.risk_type.value,
+        risk_level=result.risk_level.value,
+        trigger_rule=result.trigger_rule,
+        trigger_metrics=result.trigger_metrics or {},
+        dos=result.dos,
+        ref_daily_sales=result.ref_daily_sales,
+        available_inventory=result.available_inventory,
+        inbound_relief_applied=result.inbound_relief_applied,
+        relief_note=result.relief_note,
+        handling_status=result.handling_status.value,
+        primary_explanation=explain.primary_explanation if explain else None,
+        suggested_action=explain.suggested_action if explain else None,
+        responsible_role=explain.responsible_role if explain else None,
+    )
 
 
 @router.get("/health")
@@ -51,9 +90,15 @@ def daily_report(
         FactMonitorResult.date == md,
         FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
     )
-    monitored = db.query(func.count(func.distinct(FactMonitorResult.sku))).filter(
-        FactMonitorResult.date == md
-    ).scalar() or 0
+    monitored = (
+        db.query(func.count(func.distinct(FactMonitorResult.sku)))
+        .filter(
+            FactMonitorResult.date == md,
+            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+        )
+        .scalar()
+        or 0
+    )
 
     def _count(level: RiskLevel, rtype: RiskType | None = None) -> int:
         q = base_q.filter(FactMonitorResult.risk_level == level)
@@ -119,12 +164,114 @@ def daily_report(
     )
 
 
+@router.get("/reports/analytics", response_model=ReportAnalyticsOut)
+def report_analytics(
+    monitor_date: date | None = None,
+    db: Session = Depends(get_db),
+) -> ReportAnalyticsOut:
+    md = monitor_date or _latest_monitor_date(db) or date.today()
+    base_q = db.query(FactMonitorResult).filter(
+        FactMonitorResult.date == md,
+        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+    )
+
+    level_counts = {level.value: 0 for level in RiskLevel}
+    for level, count in (
+        base_q.with_entities(FactMonitorResult.risk_level, func.count())
+        .group_by(FactMonitorResult.risk_level)
+        .all()
+    ):
+        level_counts[level.value] = count
+
+    type_counts: dict[str, int] = {}
+    for rtype, count in (
+        base_q.with_entities(FactMonitorResult.risk_type, func.count())
+        .group_by(FactMonitorResult.risk_type)
+        .all()
+    ):
+        type_counts[rtype.value] = count
+
+    trend_7d: list[TrendPoint] = []
+    for offset in range(6, -1, -1):
+        d = md - timedelta(days=offset)
+        day_q = db.query(FactMonitorResult).filter(
+            FactMonitorResult.date == d,
+            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+        )
+        counts = {level.value: 0 for level in RiskLevel}
+        for level, count in (
+            day_q.with_entities(FactMonitorResult.risk_level, func.count())
+            .group_by(FactMonitorResult.risk_level)
+            .all()
+        ):
+            counts[level.value] = count
+        trend_7d.append(
+            TrendPoint(
+                date=d,
+                red=counts[RiskLevel.RED.value],
+                orange=counts[RiskLevel.ORANGE.value],
+                yellow=counts[RiskLevel.YELLOW.value],
+                green=counts[RiskLevel.GREEN.value],
+            )
+        )
+
+    priority_rows = (
+        db.query(FactMonitorResult, DimSku)
+        .outerjoin(DimSku, DimSku.sku == FactMonitorResult.sku)
+        .filter(
+            FactMonitorResult.date == md,
+            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+            FactMonitorResult.risk_level == RiskLevel.RED,
+            FactMonitorResult.requires_human_confirm.is_(True),
+        )
+        .order_by(FactMonitorResult.dos.asc())
+        .limit(5)
+        .all()
+    )
+    top_priority = [
+        _result_to_out(result, sku, _explain_for(db, md, result.sku))
+        for result, sku in priority_rows
+    ]
+
+    return ReportAnalyticsOut(
+        monitor_date=md,
+        level_counts=level_counts,
+        type_counts=type_counts,
+        trend_7d=trend_7d,
+        top_priority=top_priority,
+    )
+
+
+@router.get("/alerts/meta", response_model=AlertsMetaOut)
+def alerts_meta(
+    monitor_date: date | None = None,
+    db: Session = Depends(get_db),
+) -> AlertsMetaOut:
+    md = monitor_date or _latest_monitor_date(db) or date.today()
+    base_q = db.query(FactMonitorResult).filter(
+        FactMonitorResult.date == md,
+        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+    )
+    warehouses = sorted(
+        w for (w,) in base_q.with_entities(FactMonitorResult.warehouse).distinct().all() if w
+    )
+    type_counts: dict[str, int] = {}
+    for rtype, count in (
+        base_q.with_entities(FactMonitorResult.risk_type, func.count())
+        .group_by(FactMonitorResult.risk_type)
+        .all()
+    ):
+        type_counts[rtype.value] = count
+    return AlertsMetaOut(monitor_date=md, warehouses=warehouses, type_counts=type_counts)
+
+
 @router.get("/alerts", response_model=PaginatedAlerts)
 def list_alerts(
     monitor_date: date | None = None,
     level: str | None = None,
     risk_type: str | None = None,
     warehouse: str | None = None,
+    sku: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -144,6 +291,8 @@ def list_alerts(
         q = q.filter(FactMonitorResult.risk_type == RiskType(risk_type))
     if warehouse:
         q = q.filter(FactMonitorResult.warehouse == warehouse)
+    if sku:
+        q = q.filter(FactMonitorResult.sku.ilike(f"%{sku}%"))
 
     total = q.count()
     rows = (
@@ -154,40 +303,9 @@ def list_alerts(
     )
 
     items: list[MonitorResultOut] = []
-    for result, sku in rows:
-        explain = (
-            db.query(FactAgentExplain)
-            .filter(
-                FactAgentExplain.date == md,
-                FactAgentExplain.sku == result.sku,
-            )
-            .order_by(FactAgentExplain.id.desc())
-            .first()
-        )
-        items.append(
-            MonitorResultOut(
-                id=result.id,
-                date=result.date,
-                sku=result.sku,
-                product_name=sku.product_name if sku else None,
-                warehouse=result.warehouse,
-                channel=result.channel,
-                scope=result.scope.value,
-                risk_type=result.risk_type.value,
-                risk_level=result.risk_level.value,
-                trigger_rule=result.trigger_rule,
-                trigger_metrics=result.trigger_metrics or {},
-                dos=result.dos,
-                ref_daily_sales=result.ref_daily_sales,
-                available_inventory=result.available_inventory,
-                inbound_relief_applied=result.inbound_relief_applied,
-                relief_note=result.relief_note,
-                handling_status=result.handling_status.value,
-                primary_explanation=explain.primary_explanation if explain else None,
-                suggested_action=explain.suggested_action if explain else None,
-                responsible_role=explain.responsible_role if explain else None,
-            )
-        )
+    for result, sku_row in rows:
+        explain = _explain_for(db, md, result.sku)
+        items.append(_result_to_out(result, sku_row, explain))
 
     return PaginatedAlerts(items=items, total=total, page=page, page_size=page_size)
 
@@ -236,6 +354,32 @@ def sku_detail(
         action_deadline=explain.action_deadline if explain else None,
         require_human_confirm=explain.require_human_confirm if explain else False,
     )
+
+
+@router.post("/alerts/{sku_id}/agent-explain", response_model=AgentExplainOut)
+def agent_explain_sku(
+    sku_id: str,
+    monitor_date: date | None = None,
+    warehouse: str | None = None,
+    db: Session = Depends(get_db),
+) -> AgentExplainOut:
+    md = monitor_date or _latest_monitor_date(db) or date.today()
+    exists = (
+        db.query(FactMonitorResult)
+        .filter(
+            FactMonitorResult.date == md,
+            FactMonitorResult.sku == sku_id,
+            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
+        )
+        .first()
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="SKU 监控结果不存在")
+    try:
+        payload = ExplainerAgent(db).explain_sku_on_demand(md, sku_id, warehouse)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return AgentExplainOut(**payload)
 
 
 @router.post("/feedback", response_model=FeedbackOut)

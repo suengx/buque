@@ -181,6 +181,34 @@ def test_build_event_pool_excludes_data_anomaly() -> None:
     assert db.add.call_count == 1
 
 
+def test_build_event_pool_excludes_orange_sales_anomaly() -> None:
+    db = MagicMock()
+    db.query.return_value.filter.return_value.delete = MagicMock()
+    md = date(2026, 6, 22)
+    persistence = MonitorPersistence(db, md)
+
+    sales_orange = MagicMock()
+    sales_orange.requires_explanation = True
+    sales_orange.risk_type = RiskType.SALES_ANOMALY
+    sales_orange.scope = MonitoringScope.WAREHOUSE
+    sales_orange.date = md
+    sales_orange.sku = "SKU3"
+    sales_orange.warehouse = "WH1"
+    sales_orange.risk_level = RiskLevel.ORANGE
+    sales_orange.trigger_rule = "SALES_SURGE"
+    sales_orange.trigger_metrics = {}
+    sales_orange.requires_human_confirm = False
+    sales_orange.dos = None
+    sales_orange.ref_daily_sales = None
+    sales_orange.available_inventory = 100
+    sales_orange.relief_note = None
+    sales_orange.id = 3
+
+    events = persistence.build_event_pool([sales_orange])
+    assert len(events) == 0
+    assert db.add.call_count == 0
+
+
 def test_reconcile_stale_jobs(db_session: Session) -> None:
     md = date(2026, 6, 22)
     job = create_sync_job(db_session, md)

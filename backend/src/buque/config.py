@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +26,8 @@ class Settings(BaseSettings):
     llm_api_base: str = ""
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
+    # off=仅规则解释；on_demand=单 SKU 深读可调 LLM；批量分析永不调 LLM
+    llm_explain_mode: Literal["off", "on_demand"] = "on_demand"
 
     data_dir: str = "data"
     export_dir: str = "data/exports"

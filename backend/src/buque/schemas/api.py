@@ -24,6 +24,20 @@ class DailyReportSummary(BaseModel):
     priority_today_count: int
 
 
+class TrendPoint(BaseModel):
+    date: date
+    red: int
+    orange: int
+    yellow: int
+    green: int
+
+
+class AlertsMetaOut(BaseModel):
+    monitor_date: date
+    warehouses: list[str]
+    type_counts: dict[str, int]
+
+
 class MonitorResultOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,6 +63,14 @@ class MonitorResultOut(BaseModel):
     responsible_role: str | None = None
 
 
+class ReportAnalyticsOut(BaseModel):
+    monitor_date: date
+    level_counts: dict[str, int]
+    type_counts: dict[str, int]
+    trend_7d: list[TrendPoint]
+    top_priority: list[MonitorResultOut]
+
+
 class SkuDetailOut(BaseModel):
     monitor_date: date
     sku: str
@@ -66,6 +88,19 @@ class SkuDetailOut(BaseModel):
     responsible_role: str | None
     action_deadline: str | None
     require_human_confirm: bool
+
+
+class AgentExplainOut(BaseModel):
+    primary_explanation: str
+    secondary_explanation: str | None = None
+    tertiary_explanation: str | None = None
+    explanation_tags: list[str] = []
+    key_evidence: list[str] = []
+    suggested_action: str
+    responsible_role: str | None = None
+    action_deadline: str | None = None
+    require_human_confirm: bool = True
+    confidence_note: str | None = None
 
 
 class FeedbackCreate(BaseModel):
@@ -188,3 +223,17 @@ class ErpSyncLatestResponse(BaseModel):
     job_id: int | None = None
     finished_at: datetime | None = None
     sync_summary: dict | None = None
+
+
+class OpsStatusResponse(BaseModel):
+    monitor_date: date
+    timezone: str
+    schedule_label: str
+    next_scheduled_at: datetime
+    pipeline_active: bool
+    sync_running: bool
+    analysis_running: bool
+    sync_phase_message: str | None = None
+    analysis_phase_message: str | None = None
+    erp_configured: bool
+    latest_sync: ErpSyncLatestResponse
