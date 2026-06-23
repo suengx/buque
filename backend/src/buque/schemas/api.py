@@ -227,3 +227,47 @@ class OpsStatusResponse(BaseModel):
     running_snapshot_id: int | None = None
     phase_message: str | None = None
     erp_configured: bool
+
+
+class RuleConfigOut(BaseModel):
+    rule_code: str
+    rule_name: str
+    param_value: str
+    param_type: str
+    version: int
+    effective_date: date
+    is_enabled: bool
+    change_reason: str | None = None
+    proposer: str | None = None
+    category: str
+    description: str
+    editor: str
+
+
+class RuleConfigUpdate(BaseModel):
+    param_value: str | None = None
+    is_enabled: bool | None = None
+    change_reason: str
+    proposer: str | None = None
+
+
+class RuleGroupOut(BaseModel):
+    category: str
+    category_label: str
+    rules: list[RuleConfigOut]
+
+
+class RulesGroupedOut(BaseModel):
+    groups: list[RuleGroupOut]
+
+
+class MetricLabelOut(BaseModel):
+    rule_code: str
+    label: str
+    short_label: str
+
+
+class MetricLabelsOut(BaseModel):
+    risk_levels: dict[str, list[MetricLabelOut]]
+    special_risks: dict[str, list[MetricLabelOut]]
+    section_descriptions: dict[str, str]

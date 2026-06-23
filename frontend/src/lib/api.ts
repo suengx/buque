@@ -183,6 +183,39 @@ export type PipelineRunResult = {
   explained: number
 }
 
+export type RuleConfigItem = {
+  rule_code: string
+  rule_name: string
+  param_value: string
+  param_type: string
+  version: number
+  effective_date: string
+  is_enabled: boolean
+  change_reason?: string | null
+  proposer?: string | null
+  category: string
+  description: string
+  editor: string
+}
+
+export type RuleGroup = {
+  category: string
+  category_label: string
+  rules: RuleConfigItem[]
+}
+
+export type MetricLabel = {
+  rule_code: string
+  label: string
+  short_label: string
+}
+
+export type MetricLabels = {
+  risk_levels: Record<string, MetricLabel[]>
+  special_risks: Record<string, MetricLabel[]>
+  section_descriptions: Record<string, string>
+}
+
 export const api = {
   dailyReport: (snapshotId?: number) =>
     request<DailyReportSummary>(`/reports/daily${snapshotQuery(snapshotId)}`),
@@ -231,6 +264,23 @@ export const api = {
     if (opts.ingestionSource) q.set('ingestion_source', opts.ingestionSource)
     return request<PipelineRunResult>(`/admin/pipeline/run?${q}`, { method: 'POST' })
   },
+  listRules: () => request<{ groups: RuleGroup[] }>('/rules'),
+  getMetricLabels: () => request<MetricLabels>('/rules/metric-labels'),
+  getRuleHistory: (ruleCode: string) =>
+    request<RuleConfigItem[]>(`/rules/${encodeURIComponent(ruleCode)}/history`),
+  updateRule: (
+    ruleCode: string,
+    body: {
+      param_value?: string
+      is_enabled?: boolean
+      change_reason: string
+      proposer?: string
+    },
+  ) =>
+    request<RuleConfigItem>(`/rules/${encodeURIComponent(ruleCode)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
 }
 
 export const queryKeys = {
@@ -243,4 +293,7 @@ export const queryKeys = {
     ['skuDetail', sku, snapshotId, warehouse] as const,
   feedbackStats: ['feedbackStats'] as const,
   opsStatus: ['opsStatus'] as const,
+  rules: ['rules'] as const,
+  metricLabels: ['metricLabels'] as const,
+  ruleHistory: (code: string) => ['ruleHistory', code] as const,
 }

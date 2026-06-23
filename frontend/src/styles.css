@@ -1583,3 +1583,178 @@ a {
   font-weight: 400;
   color: var(--sea-ink-soft);
 }
+
+.buque-metric-label-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3125rem;
+  margin-top: 0.5rem;
+}
+
+.buque-metric-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--sea-ink-soft);
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.buque-metric-label:hover {
+  border-color: var(--aqua);
+  background: color-mix(in oklab, var(--aqua) 8%, transparent);
+  color: var(--sea-ink);
+}
+
+.buque-metric-label-static {
+  cursor: default;
+}
+
+.buque-metric-label-static:hover {
+  border-color: var(--hairline);
+  background: transparent;
+  color: var(--sea-ink-soft);
+}
+
+.buque-metric-label-red {
+  border-color: color-mix(in oklab, var(--risk-red-border) 70%, var(--hairline));
+  background: color-mix(in oklab, var(--risk-red-bg) 60%, transparent);
+}
+
+.buque-metric-label-orange {
+  border-color: color-mix(in oklab, var(--risk-orange-border) 70%, var(--hairline));
+  background: color-mix(in oklab, var(--risk-orange-bg) 60%, transparent);
+}
+
+.buque-metric-label-yellow {
+  border-color: color-mix(in oklab, var(--risk-yellow-border) 70%, var(--hairline));
+  background: color-mix(in oklab, var(--risk-yellow-bg) 60%, transparent);
+}
+
+.buque-metric-label-green {
+  border-color: color-mix(in oklab, var(--risk-green-border) 70%, var(--hairline));
+  background: color-mix(in oklab, var(--risk-green-bg) 60%, transparent);
+}
+
+.buque-rule-notice {
+  border: 1px solid var(--hairline);
+  border-radius: 0.5rem;
+  background: color-mix(in oklab, var(--aqua) 6%, var(--surface-card));
+  padding: 0.625rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--sea-ink-soft);
+}
+
+.buque-rule-row-focus td {
+  animation: buque-rule-focus 2s ease;
+}
+
+.buque-rule-expand-row td {
+  padding-top: 0 !important;
+  padding-bottom: 0.625rem !important;
+  background: color-mix(in oklab, var(--bg-canvas) 35%, var(--surface-card));
+}
+
+.buque-rule-input {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.buque-rule-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.buque-rule-save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--hairline);
+  border-radius: 0.375rem;
+  background: var(--surface-card);
+}
+
+.buque-rule-history-wrap {
+  max-height: min(50vh, 420px);
+  margin: 0;
+}
+
+.buque-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: color-mix(in oklab, var(--sea-ink) 28%, transparent);
+}
+
+.buque-modal-panel {
+  width: min(720px, 100%);
+  max-height: min(85vh, 640px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: 0.625rem;
+  background: var(--surface-card);
+  box-shadow: 0 24px 48px color-mix(in oklab, var(--sea-ink) 18%, transparent);
+}
+
+.buque-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.buque-modal-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--sea-ink);
+}
+
+.buque-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  width: 1.75rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--sea-ink-soft);
+  cursor: pointer;
+}
+
+.buque-modal-close:hover {
+  background: color-mix(in oklab, var(--aqua) 10%, transparent);
+  color: var(--sea-ink);
+}
+
+.buque-modal-body {
+  overflow: auto;
+  padding: 1rem;
+}
+
+@keyframes buque-rule-focus {
+  0%,
+  30% {
+    background: color-mix(in oklab, var(--aqua) 14%, transparent);
+  }
+  100% {
+    background: color-mix(in oklab, var(--aqua) 6%, transparent);
+  }
+}

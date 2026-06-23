@@ -1,10 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle, LayoutDashboard, MessageSquare } from 'lucide-react'
+import { AlertTriangle, LayoutDashboard, MessageSquare, Sliders } from 'lucide-react'
 
 const nav = [
   { to: '/', label: '日报总览', icon: LayoutDashboard },
   { to: '/alerts', label: '风险预警', icon: AlertTriangle },
   { to: '/feedback', label: '人工反馈', icon: MessageSquare },
+  { to: '/settings/rules', label: '规则配置', icon: Sliders },
 ]
 
 export default function AppSidebar() {

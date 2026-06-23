@@ -65,6 +65,11 @@ function AlertsPage() {
     enabled: selectedSnapshotId !== undefined,
   })
 
+  const { data: metricLabels } = useQuery({
+    queryKey: queryKeys.metricLabels,
+    queryFn: () => api.getMetricLabels(),
+  })
+
   const alertParams: Record<string, string | number> = {
     page: search.page ?? 1,
     page_size: PAGE_SIZE,
@@ -142,7 +147,7 @@ function AlertsPage() {
           badge="低风险"
           value={low}
           percent={pct(low, totalAlerts)}
-          description="黄灯预警，进入次级关注"
+          metricLabels={metricLabels?.risk_levels.YELLOW}
           icon={CircleAlert}
           accent="yellow"
           onClick={() => navigate({ search: { level: 'YELLOW', page: 1 } })}
@@ -151,7 +156,7 @@ function AlertsPage() {
           badge="中风险"
           value={mid}
           percent={pct(mid, totalAlerts)}
-          description="橙灯预警，建议当日跟进"
+          metricLabels={metricLabels?.risk_levels.ORANGE}
           icon={TriangleAlert}
           accent="orange"
           onClick={() => navigate({ search: { level: 'ORANGE', page: 1 } })}
@@ -160,7 +165,7 @@ function AlertsPage() {
           badge="高风险"
           value={high}
           percent={pct(high, totalAlerts)}
-          description="红灯预警，须当天确认"
+          metricLabels={metricLabels?.risk_levels.RED}
           icon={OctagonAlert}
           accent="red"
           onClick={() => navigate({ search: { level: 'RED', page: 1 } })}

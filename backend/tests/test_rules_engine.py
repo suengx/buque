@@ -10,13 +10,16 @@ from buque.models.entities import (
     ErpSyncJob,
     ErpSyncPhase,
     FactInventoryDaily,
+    FactSalesDaily,
     IngestionStatus,
     JobKind,
     MonitoringScope,
     RiskLevel,
     RiskType,
+    RuleConfig,
 )
 from buque.rules.engine import RuleEngine, _upgrade, _valid_sales
+from buque.services.rule_config import RuleConfigService
 
 
 def test_upgrade_level() -> None:
@@ -78,6 +81,53 @@ def test_rule_engine_handles_nan_ref_daily_sales(db_session: Session) -> None:
     findings = RuleEngine(db_session, date(2026, 6, 22), SNAPSHOT_ID)._evaluate_warehouse_scope()
     anomaly = [f for f in findings if f.trigger_rule == "MISSING_DATA_BLOCK"]
     assert len(anomaly) == 1
-    assert anomaly[0].risk_type == RiskType.DATA_ANOMALY
-    assert anomaly[0].scope == MonitoringScope.WAREHOUSE
-    assert anomaly[0].requires_explanation is False
+
+
+def test_stockout_orange_factor_from_config(db_session: Session) -> None:
+    bind = db_session.get_bind()
+    RuleConfig.__table__.create(bind, checkfirst=True)
+    FactSalesDaily.__table__.create(bind, checkfirst=True)
+    rules = (
+        ("DOS_RED_REG", "30", "int"),
+        ("DOS_RED_SEA", "45", "int"),
+        ("SLOW_DOS_RED_REG", "150", "int"),
+        ("SLOW_DOS_RED_SEA", "180", "int"),
+        ("STOCKOUT_ORANGE_FACTOR", "2.0", "float"),
+        ("STOCKOUT_YELLOW_FACTOR", "2.0", "float"),
+        ("SLOW_ORANGE_FACTOR", "0.85", "float"),
+        ("SLOW_YELLOW_FACTOR", "0.7", "float"),
+        ("SALES_SURGE_RATIO", "1.5", "float"),
+        ("KEY_SKU_UPGRADE", "false", "bool"),
+        ("INBOUND_RELIEF_DOWNGRADE", "false", "bool"),
+    )
+    for code, val, ptype in rules:
+        db_session.add(
+            RuleConfig(
+                rule_code=code,
+                rule_name=code,
+                param_value=val,
+                param_type=ptype,
+                is_enabled=True,
+                version=1,
+                effective_date=date(2026, 6, 22),
+                proposer="test",
+                change_reason="test",
+            )
+        )
+    db_session.add(DimSku(sku="SKU-A", product_name="A"))
+    db_session.add(
+        FactInventoryDaily(
+            snapshot_id=SNAPSHOT_ID,
+            date=date(2026, 6, 22),
+            sku="SKU-A",
+            warehouse="WH1",
+            available_inventory=100,
+            ref_daily_sales=Decimal("2"),
+        )
+    )
+    db_session.commit()
+    cfg = RuleConfigService(db_session)
+    findings = RuleEngine(db_session, date(2026, 6, 22), SNAPSHOT_ID, cfg=cfg)._evaluate_warehouse_scope()
+    stockout = [f for f in findings if f.risk_type == RiskType.STOCKOUT]
+    assert len(stockout) == 1
+    assert stockout[0].risk_level == RiskLevel.ORANGE

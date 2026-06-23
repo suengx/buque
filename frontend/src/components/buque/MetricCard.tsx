@@ -1,15 +1,15 @@
+import { Link } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
+import type { MetricLabel } from '#/lib/api'
 import { cn } from '#/lib/utils'
 
 type Props = {
-  /** 概览 / 专项类卡片左上角标题 */
   title?: string
-  /** 风险等级类卡片右上角「标签 + 图标」融合展示，如「高风险」 */
   badge?: string
   value: string | number
   percent?: string
-  /** 卡片内浅色说明，替代 tooltip */
   description?: string
+  metricLabels?: MetricLabel[]
   icon?: LucideIcon
   iconClassName?: string
   accent?: 'red' | 'orange' | 'yellow' | 'green' | 'neutral'
@@ -48,12 +48,21 @@ const percentAccent: Record<NonNullable<Props['accent']>, string> = {
   neutral: 'text-[var(--aqua)]',
 }
 
+const labelAccent: Record<NonNullable<Props['accent']>, string> = {
+  red: 'buque-metric-label-red',
+  orange: 'buque-metric-label-orange',
+  yellow: 'buque-metric-label-yellow',
+  green: 'buque-metric-label-green',
+  neutral: 'buque-metric-label-neutral',
+}
+
 export function MetricCard({
   title,
   badge,
   value,
   percent,
   description,
+  metricLabels,
   icon: Icon,
   iconClassName,
   accent = 'neutral',
@@ -62,6 +71,7 @@ export function MetricCard({
   const clickable = Boolean(onClick)
   const showBadge = Boolean(badge && Icon)
   const showIconOnly = Boolean(Icon && title && !badge)
+  const labels = metricLabels?.filter((l) => l.label) ?? []
 
   return (
     <div
@@ -98,7 +108,32 @@ export function MetricCard({
       {percent ? (
         <div className={cn('buque-metric-percent', percentAccent[accent])}>{percent}</div>
       ) : null}
-      {description ? <p className="buque-metric-desc">{description}</p> : null}
+      {labels.length > 0 ? (
+        <div className="buque-metric-label-stack">
+          {labels.map((item) =>
+            item.rule_code ? (
+              <Link
+                key={`${item.rule_code}-${item.label}`}
+                to="/settings/rules"
+                search={{ focus: item.rule_code }}
+                className={cn('buque-metric-label', labelAccent[accent])}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <span
+                key={item.label}
+                className={cn('buque-metric-label', labelAccent[accent], 'buque-metric-label-static')}
+              >
+                {item.label}
+              </span>
+            ),
+          )}
+        </div>
+      ) : description ? (
+        <p className="buque-metric-desc">{description}</p>
+      ) : null}
     </div>
   )
 }

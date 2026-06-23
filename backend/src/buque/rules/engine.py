@@ -278,14 +278,18 @@ class RuleEngine:
         stockout_red = _dos_threshold(seasonality, "DOS_RED_REG", "DOS_RED_SEA", self.cfg)
         slow_red = _dos_threshold(seasonality, "SLOW_DOS_RED_REG", "SLOW_DOS_RED_SEA", self.cfg)
         surge_ratio = self.cfg.get_float("SALES_SURGE_RATIO", 1.5)
+        stockout_orange_factor = Decimal(str(self.cfg.get_float("STOCKOUT_ORANGE_FACTOR", 1.5)))
+        stockout_yellow_factor = Decimal(str(self.cfg.get_float("STOCKOUT_YELLOW_FACTOR", 2.0)))
+        slow_orange_factor = Decimal(str(self.cfg.get_float("SLOW_ORANGE_FACTOR", 0.85)))
+        slow_yellow_factor = Decimal(str(self.cfg.get_float("SLOW_YELLOW_FACTOR", 0.7)))
 
         # 断货
         stockout_level = RiskLevel.GREEN
         if dos <= stockout_red:
             stockout_level = RiskLevel.RED
-        elif dos <= stockout_red * Decimal("1.5"):
+        elif dos <= stockout_red * stockout_orange_factor:
             stockout_level = RiskLevel.ORANGE
-        elif dos <= stockout_red * Decimal("2"):
+        elif dos <= stockout_red * stockout_yellow_factor:
             stockout_level = RiskLevel.YELLOW
 
         s3 = sales_metrics.get("sales_3d_avg", ZERO)
@@ -339,9 +343,9 @@ class RuleEngine:
         slow_level = RiskLevel.GREEN
         if dos >= slow_red:
             slow_level = RiskLevel.RED
-        elif dos >= slow_red * Decimal("0.85"):
+        elif dos >= slow_red * slow_orange_factor:
             slow_level = RiskLevel.ORANGE
-        elif dos >= slow_red * Decimal("0.7"):
+        elif dos >= slow_red * slow_yellow_factor:
             slow_level = RiskLevel.YELLOW
 
         if slow_level != RiskLevel.GREEN:

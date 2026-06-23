@@ -49,19 +49,10 @@ class RuleConfigService:
     def all_params(self) -> dict[str, str]:
         if self._cache is not None:
             return self._cache
-        rows = (
-            self.db.query(RuleConfig)
-            .filter(RuleConfig.is_enabled.is_(True))
-            .order_by(RuleConfig.rule_code, RuleConfig.version.desc())
-            .all()
-        )
-        seen: set[str] = set()
-        params: dict[str, str] = {}
-        for row in rows:
-            if row.rule_code in seen:
-                continue
-            seen.add(row.rule_code)
-            params[row.rule_code] = row.param_value
+        from buque.services.rule_config_admin import list_effective_rules
+
+        rows = list_effective_rules(self.db)
+        params = {row.rule_code: row.param_value for row in rows}
         self._cache = params
         return params
 

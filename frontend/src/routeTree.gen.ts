@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as FeedbackIndexRouteImport } from './routes/feedback/index'
 import { Route as AlertsIndexRouteImport } from './routes/alerts/index'
 import { Route as AlertsSkuIdRouteImport } from './routes/alerts/$skuId'
+import { Route as SettingsRulesIndexRouteImport } from './routes/settings/rules/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const AlertsSkuIdRoute = AlertsSkuIdRouteImport.update({
   path: '/alerts/$skuId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRulesIndexRoute = SettingsRulesIndexRouteImport.update({
+  id: '/settings/rules/',
+  path: '/settings/rules/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alerts/$skuId': typeof AlertsSkuIdRoute
   '/alerts/': typeof AlertsIndexRoute
   '/feedback/': typeof FeedbackIndexRoute
+  '/settings/rules/': typeof SettingsRulesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alerts/$skuId': typeof AlertsSkuIdRoute
   '/alerts': typeof AlertsIndexRoute
   '/feedback': typeof FeedbackIndexRoute
+  '/settings/rules': typeof SettingsRulesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,25 @@ export interface FileRoutesById {
   '/alerts/$skuId': typeof AlertsSkuIdRoute
   '/alerts/': typeof AlertsIndexRoute
   '/feedback/': typeof FeedbackIndexRoute
+  '/settings/rules/': typeof SettingsRulesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/alerts/$skuId' | '/alerts/' | '/feedback/'
+  fullPaths:
+    | '/'
+    | '/alerts/$skuId'
+    | '/alerts/'
+    | '/feedback/'
+    | '/settings/rules/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/alerts/$skuId' | '/alerts' | '/feedback'
-  id: '__root__' | '/' | '/alerts/$skuId' | '/alerts/' | '/feedback/'
+  to: '/' | '/alerts/$skuId' | '/alerts' | '/feedback' | '/settings/rules'
+  id:
+    | '__root__'
+    | '/'
+    | '/alerts/$skuId'
+    | '/alerts/'
+    | '/feedback/'
+    | '/settings/rules/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +87,7 @@ export interface RootRouteChildren {
   AlertsSkuIdRoute: typeof AlertsSkuIdRoute
   AlertsIndexRoute: typeof AlertsIndexRoute
   FeedbackIndexRoute: typeof FeedbackIndexRoute
+  SettingsRulesIndexRoute: typeof SettingsRulesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlertsSkuIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/rules/': {
+      id: '/settings/rules/'
+      path: '/settings/rules'
+      fullPath: '/settings/rules/'
+      preLoaderRoute: typeof SettingsRulesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +135,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlertsSkuIdRoute: AlertsSkuIdRoute,
   AlertsIndexRoute: AlertsIndexRoute,
   FeedbackIndexRoute: FeedbackIndexRoute,
+  SettingsRulesIndexRoute: SettingsRulesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

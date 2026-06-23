@@ -58,6 +58,11 @@ function DailyReportPage() {
     enabled: selectedSnapshotId !== undefined,
   })
 
+  const { data: metricLabels } = useQuery({
+    queryKey: queryKeys.metricLabels,
+    queryFn: () => api.getMetricLabels(),
+  })
+
   const levels = analytics?.level_counts ?? {}
   const totalAlerts =
     (levels.RED ?? 0) + (levels.ORANGE ?? 0) + (levels.YELLOW ?? 0)
@@ -99,13 +104,16 @@ function DailyReportPage() {
         </div>
       </SectionBlock>
 
-      <SectionBlock label="风险等级" description="当日各等级预警构成与占比">
+      <SectionBlock
+        label="风险等级"
+        description={metricLabels?.section_descriptions.risk_levels ?? '按指标划档'}
+      >
         <div className="buque-metric-grid buque-metric-grid-4">
           <MetricCard
             badge="高风险"
             value={levels.RED ?? 0}
             percent={pct(levels.RED ?? 0, totalAlerts)}
-            description="须当天确认处置；规则引擎判定为紧急风险"
+            metricLabels={metricLabels?.risk_levels.RED}
             icon={OctagonAlert}
             accent="red"
             onClick={() => goAlerts({ level: 'RED' })}
@@ -114,7 +122,7 @@ function DailyReportPage() {
             badge="中风险"
             value={levels.ORANGE ?? 0}
             percent={pct(levels.ORANGE ?? 0, totalAlerts)}
-            description="建议责任人当日跟进确认"
+            metricLabels={metricLabels?.risk_levels.ORANGE}
             icon={TriangleAlert}
             accent="orange"
             onClick={() => goAlerts({ level: 'ORANGE' })}
@@ -123,7 +131,7 @@ function DailyReportPage() {
             badge="低风险"
             value={levels.YELLOW ?? 0}
             percent={pct(levels.YELLOW ?? 0, totalAlerts)}
-            description="进入次级关注清单，定期复查"
+            metricLabels={metricLabels?.risk_levels.YELLOW}
             icon={CircleAlert}
             accent="yellow"
             onClick={() => goAlerts({ level: 'YELLOW' })}
@@ -131,7 +139,7 @@ function DailyReportPage() {
           <MetricCard
             badge="正常"
             value={levels.GREEN ?? 0}
-            description="监控指标处于正常区间，无预警触发"
+            metricLabels={metricLabels?.risk_levels.GREEN}
             icon={CircleCheck}
             accent="green"
             onClick={() => goAlerts({ level: 'GREEN' })}
@@ -139,12 +147,15 @@ function DailyReportPage() {
         </div>
       </SectionBlock>
 
-      <SectionBlock label="专项风险" description="按业务类型聚焦的高风险 SKU">
+      <SectionBlock
+        label="专项风险"
+        description={metricLabels?.section_descriptions.special_risks ?? '红橙档专项 SKU'}
+      >
         <div className="buque-metric-grid buque-metric-grid-2">
           <MetricCard
             title="断货高风险"
             value={daily.stockout_high_risk_count}
-            description="断货类型且处于红/橙灯；红橙灯口径统计"
+            metricLabels={metricLabels?.special_risks.STOCKOUT}
             icon={PackageX}
             accent="red"
             onClick={() => goAlerts({ risk_type: 'STOCKOUT' })}
@@ -152,7 +163,7 @@ function DailyReportPage() {
           <MetricCard
             title="滞销高风险"
             value={daily.slow_moving_high_risk_count}
-            description="滞销类型且处于红/橙灯；红橙灯口径统计"
+            metricLabels={metricLabels?.special_risks.SLOW_MOVING}
             icon={TrendingDown}
             accent="orange"
             onClick={() => goAlerts({ risk_type: 'SLOW_MOVING' })}
