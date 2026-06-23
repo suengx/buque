@@ -12,9 +12,9 @@ dist/
 build/
 .alembic/
 
-# Data & exports
-backend/data/exports/
-backend/data/raw/
+# Runtime data (ERP exports, RPA probes — not versioned)
+backend/data/*
+!backend/data/.gitkeep
 *.xlsx
 !docs/desensitized_raw_docs.xlsx
 
