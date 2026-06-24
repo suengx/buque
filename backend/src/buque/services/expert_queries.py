@@ -40,6 +40,71 @@ EXPLANATION_TAGS = [
 ]
 
 
+FILTER_SCHEMA = {
+    "levels": [level.value for level in RiskLevel],
+    "risk_types": [rtype.value for rtype in RiskType],
+}
+
+_LEVEL_ALIASES: dict[str, RiskLevel] = {
+    "RED": RiskLevel.RED,
+    "red": RiskLevel.RED,
+    "红色": RiskLevel.RED,
+    "橙": RiskLevel.ORANGE,
+    "ORANGE": RiskLevel.ORANGE,
+    "orange": RiskLevel.ORANGE,
+    "橙色": RiskLevel.ORANGE,
+    "YELLOW": RiskLevel.YELLOW,
+    "yellow": RiskLevel.YELLOW,
+    "黄色": RiskLevel.YELLOW,
+    "GREEN": RiskLevel.GREEN,
+    "green": RiskLevel.GREEN,
+    "绿色": RiskLevel.GREEN,
+}
+
+_RISK_TYPE_ALIASES: dict[str, RiskType] = {
+    "STOCKOUT": RiskType.STOCKOUT,
+    "stockout": RiskType.STOCKOUT,
+    "断货": RiskType.STOCKOUT,
+    "缺货": RiskType.STOCKOUT,
+    "SLOW_MOVING": RiskType.SLOW_MOVING,
+    "slow_moving": RiskType.SLOW_MOVING,
+    "滞销": RiskType.SLOW_MOVING,
+    "SALES_ANOMALY": RiskType.SALES_ANOMALY,
+    "sales_anomaly": RiskType.SALES_ANOMALY,
+    "销量异常": RiskType.SALES_ANOMALY,
+    "FORECAST_BIAS": RiskType.FORECAST_BIAS,
+    "forecast_bias": RiskType.FORECAST_BIAS,
+    "预测偏差": RiskType.FORECAST_BIAS,
+    "DATA_ANOMALY": RiskType.DATA_ANOMALY,
+    "data_anomaly": RiskType.DATA_ANOMALY,
+    "数据异常": RiskType.DATA_ANOMALY,
+}
+
+
+def normalize_risk_level(value: str | None) -> RiskLevel | None:
+    if not value:
+        return None
+    key = value.strip()
+    if key in _LEVEL_ALIASES:
+        return _LEVEL_ALIASES[key]
+    try:
+        return RiskLevel(key.upper())
+    except ValueError:
+        return None
+
+
+def normalize_risk_type(value: str | None) -> RiskType | None:
+    if not value:
+        return None
+    key = value.strip()
+    if key in _RISK_TYPE_ALIASES:
+        return _RISK_TYPE_ALIASES[key]
+    try:
+        return RiskType(key.upper())
+    except ValueError:
+        return None
+
+
 def _format_snapshot_time(finished_at) -> str:
     if finished_at is None:
         return "—"
@@ -166,6 +231,7 @@ def fetch_daily_summary(db: Session, snapshot_id: int) -> dict[str, Any]:
             FactMonitorResult.risk_level == RiskLevel.RED,
             FactMonitorResult.requires_human_confirm.is_(True),
         ).count(),
+        "filter_schema": FILTER_SCHEMA,
     }
 
 
@@ -180,6 +246,28 @@ def fetch_alerts(
     page: int = 1,
     page_size: int = 20,
 ) -> dict[str, Any]:
+    normalized_level = normalize_risk_level(level)
+    if level and normalized_level is None:
+        return {
+            "error": f"无效的 level: {level}",
+            "allowed_levels": FILTER_SCHEMA["levels"],
+            "items": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+        }
+
+    normalized_risk_type = normalize_risk_type(risk_type)
+    if risk_type and normalized_risk_type is None:
+        return {
+            "error": f"无效的 risk_type: {risk_type}",
+            "allowed_risk_types": FILTER_SCHEMA["risk_types"],
+            "items": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+        }
+
     q = (
         db.query(FactMonitorResult, DimSku)
         .outerjoin(DimSku, DimSku.sku == FactMonitorResult.sku)
@@ -188,10 +276,10 @@ def fetch_alerts(
             FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
         )
     )
-    if level:
-        q = q.filter(FactMonitorResult.risk_level == RiskLevel(level))
-    if risk_type:
-        q = q.filter(FactMonitorResult.risk_type == RiskType(risk_type))
+    if normalized_level:
+        q = q.filter(FactMonitorResult.risk_level == normalized_level)
+    if normalized_risk_type:
+        q = q.filter(FactMonitorResult.risk_type == normalized_risk_type)
     if warehouse:
         q = q.filter(FactMonitorResult.warehouse == warehouse)
     if sku:
@@ -225,7 +313,13 @@ def fetch_alerts(
             }
         )
 
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "sort_hint": "risk_level desc, dos asc",
+    }
 
 
 def build_sku_context(

@@ -38,6 +38,8 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     explanation_draft: ExplanationDraftOut | None = None
+    process_trace: list[dict[str, str | None]] | None = None
+    process_duration_ms: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -27,13 +27,18 @@ router = APIRouter(
 
 
 def _message_out(row) -> ChatMessageOut:
-    draft_raw = (row.message_metadata or {}).get("explanation_draft")
+    meta = row.message_metadata or {}
+    draft_raw = meta.get("explanation_draft")
     draft = ExplanationDraftOut(**draft_raw) if draft_raw else None
+    process_trace = meta.get("process_trace")
+    process_duration_ms = meta.get("process_duration_ms")
     return ChatMessageOut(
         id=row.id,
         role=row.role,
         content=row.content,
         explanation_draft=draft,
+        process_trace=process_trace,
+        process_duration_ms=process_duration_ms,
         created_at=row.created_at,
     )
 

@@ -20,6 +20,20 @@ REQUIRED_DRAFT_FIELDS = (
     "suggested_action",
 )
 
+LIST_ALERTS_SCHEMA = {
+    "level": {"type": "string", "description": "可选 RED/ORANGE/YELLOW/GREEN"},
+    "risk_type": {"type": "string", "description": "可选 STOCKOUT/SLOW_MOVING 等"},
+    "sku": {"type": "string", "description": "可选 SKU 模糊筛选"},
+    "warehouse": {"type": "string", "description": "可选仓库筛选"},
+    "page": {"type": "integer", "description": "页码，默认 1"},
+    "page_size": {"type": "integer", "description": "每页条数，top N 时设为 N"},
+}
+
+GET_SKU_CONTEXT_SCHEMA = {
+    "sku": {"type": "string", "description": "必填，从用户消息提取，如 C0180444"},
+    "warehouse": {"type": "string", "description": "可选仓库"},
+}
+
 
 @dataclass
 class ExpertToolContext:
@@ -35,50 +49,53 @@ def _text_result(payload: Any) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": dumps_json(payload)}]}
 
 
+def _error_result(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "content": [{"type": "text", "text": dumps_json(payload)}],
+        "is_error": True,
+    }
+
+
 def create_buque_mcp_server(ctx: ExpertToolContext):
-    @tool("get_daily_summary", "获取当前快照的日报摘要", {})
+    @tool(
+        "get_daily_summary",
+        "获取当前快照日报摘要、计数与 filter_schema（合法 level/risk_type 枚举）",
+        {},
+    )
     async def get_daily_summary_tool(args: dict[str, Any]) -> dict[str, Any]:
         _ = args
         return _text_result(fetch_daily_summary(ctx.db, ctx.snapshot_id))
 
     @tool(
         "list_alerts",
-        "分页列出当前快照的风险预警",
-        {
-            "level": str,
-            "risk_type": str,
-            "warehouse": str,
-            "sku": str,
-            "page": int,
-            "page_size": int,
-        },
+        "分页列出风险预警。所有筛选参数均为可选；不传则返回全快照清单。"
+        "page_size 控制条数，结果已按 risk_level desc + dos asc 排序（top N 用 page_size=N）",
+        LIST_ALERTS_SCHEMA,
     )
     async def list_alerts_tool(args: dict[str, Any]) -> dict[str, Any]:
-        return _text_result(
-            fetch_alerts(
-                ctx.db,
-                ctx.snapshot_id,
-                level=args.get("level") or None,
-                risk_type=args.get("risk_type") or None,
-                warehouse=args.get("warehouse") or None,
-                sku=args.get("sku") or None,
-                page=int(args.get("page") or 1),
-                page_size=int(args.get("page_size") or 20),
-            )
+        result = fetch_alerts(
+            ctx.db,
+            ctx.snapshot_id,
+            level=args.get("level") or None,
+            risk_type=args.get("risk_type") or None,
+            warehouse=args.get("warehouse") or None,
+            sku=args.get("sku") or None,
+            page=int(args.get("page") or 1),
+            page_size=int(args.get("page_size") or 20),
         )
+        if result.get("error"):
+            return _error_result(result)
+        return _text_result(result)
 
     @tool(
         "get_sku_context",
-        "获取 SKU 库存销量监控上下文与规则解释",
-        {"sku": str, "warehouse": str},
+        "获取指定 SKU 的库存销量监控上下文。sku 必填，从用户消息提取（如 C0180444）；warehouse 可选",
+        GET_SKU_CONTEXT_SCHEMA,
     )
     async def get_sku_context_tool(args: dict[str, Any]) -> dict[str, Any]:
         sku = args.get("sku") or ctx.sku
         if not sku:
-            return {
-                "content": [{"type": "text", "text": "缺少 sku 参数"}],
-                "is_error": True,
-            }
+            return _error_result({"error": "缺少 sku 参数"})
         warehouse = args.get("warehouse") or ctx.warehouse
         return _text_result(
             build_sku_context(ctx.db, ctx.monitor_date, ctx.snapshot_id, sku, warehouse)
@@ -86,34 +103,26 @@ def create_buque_mcp_server(ctx: ExpertToolContext):
 
     @tool(
         "propose_explanation_draft",
-        "提交结构化解释草稿（采纳前不写库）",
+        "提交结构化解释草稿；仅 primary_explanation 与 suggested_action 必填",
         {
-            "sku": str,
-            "warehouse": str,
-            "primary_explanation": str,
-            "secondary_explanation": str,
-            "tertiary_explanation": str,
-            "explanation_tags": list,
-            "key_evidence": list,
-            "suggested_action": str,
-            "responsible_role": str,
-            "action_deadline": str,
-            "require_human_confirm": bool,
-            "confidence_note": str,
+            "primary_explanation": {"type": "string"},
+            "suggested_action": {"type": "string"},
+            "sku": {"type": "string"},
+            "warehouse": {"type": "string"},
+            "secondary_explanation": {"type": "string"},
+            "tertiary_explanation": {"type": "string"},
+            "explanation_tags": {"type": "array"},
+            "key_evidence": {"type": "array"},
+            "responsible_role": {"type": "string"},
+            "action_deadline": {"type": "string"},
+            "require_human_confirm": {"type": "boolean"},
+            "confidence_note": {"type": "string"},
         },
     )
     async def propose_explanation_draft_tool(args: dict[str, Any]) -> dict[str, Any]:
         missing = [f for f in REQUIRED_DRAFT_FIELDS if not args.get(f)]
         if missing:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"解释草稿缺少必填字段: {', '.join(missing)}",
-                    }
-                ],
-                "is_error": True,
-            }
+            return _error_result({"error": f"解释草稿缺少必填字段: {', '.join(missing)}"})
         draft = {
             "sku": args.get("sku") or ctx.sku,
             "warehouse": args.get("warehouse") or ctx.warehouse,

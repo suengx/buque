@@ -1,6 +1,7 @@
 import { Link, useNavigate } from '@tanstack/react-router'
 import { AlertTriangle, Bot, LayoutDashboard, LogOut, MessageSquare, Sliders } from 'lucide-react'
 import { useAuth } from '#/context/AuthContext'
+import { useSnapshot } from '#/context/SnapshotContext'
 
 const nav = [
   { to: '/', label: '日报总览', icon: LayoutDashboard },
@@ -13,6 +14,7 @@ const nav = [
 export default function AppSidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { selectedSnapshotId } = useSnapshot()
 
   const displayName = user?.display_name || user?.email || '用户'
 
@@ -34,6 +36,7 @@ export default function AppSidebar() {
           <Link
             key={to}
             to={to}
+            search={to === '/chat' && selectedSnapshotId ? { snapshot_id: selectedSnapshotId } : undefined}
             className="sidebar-link [&.active]:active"
             activeProps={{ className: 'sidebar-link active' }}
           >

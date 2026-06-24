@@ -48,6 +48,11 @@ def build_agent_options(
             "append": (
                 "\n\n你是补雀监控助手。仅使用 buque MCP 工具查询事实；"
                 "解释草稿须通过 propose_explanation_draft 提交。"
+                "复杂查询前先 invoke buque-monitor skill，再按其中预设问法 JSON 示例调用；"
+                "勿要求用户补充 list_alerts 本可不传的 sku/warehouse 参数。"
+                "用户消息含 SKU 编码时直接 get_sku_context，勿追问、勿向用户解释工具定义。"
+                "匹配预设问法时先调用工具再回答，禁止无工具凭空虚构清单。"
+                "禁止在回复中讨论 MCP schema 或工具实现细节。"
             ),
         },
     )

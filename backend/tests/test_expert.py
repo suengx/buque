@@ -214,7 +214,27 @@ def test_adopt_explanation_draft(expert_client) -> None:
     db.close()
 
 
-def test_stream_agent_turn_persists_session_updated_at(expert_client) -> None:
+def test_fetch_alerts_no_filters_returns_items() -> None:
+    from buque.services.expert_queries import fetch_alerts
+
+    db = MagicMock()
+    query_mock = MagicMock()
+    query_mock.outerjoin.return_value = query_mock
+    query_mock.filter.return_value = query_mock
+    query_mock.count.return_value = 0
+    query_mock.order_by.return_value = query_mock
+    query_mock.offset.return_value = query_mock
+    query_mock.limit.return_value = query_mock
+    query_mock.all.return_value = []
+    db.query.return_value = query_mock
+
+    result = fetch_alerts(db, 1)
+    assert "error" not in result
+    assert result["items"] == []
+    assert result["sort_hint"] == "risk_level desc, dos asc"
+
+
+def test_stream_agent_turn_persists_process_trace(expert_client) -> None:
     from claude_agent_sdk import ResultMessage
 
     from buque.services.expert_agent import stream_agent_turn
@@ -266,6 +286,143 @@ def test_stream_agent_turn_persists_session_updated_at(expert_client) -> None:
     messages = db.query(ChatMessage).filter(ChatMessage.session_id == chat_session.id).all()
     assert len(messages) == 1
     assert messages[0].role == "assistant"
+    meta = messages[0].message_metadata or {}
+    assert isinstance(meta.get("process_duration_ms"), int)
+    assert meta["process_duration_ms"] >= 0
+    trace = meta.get("process_trace")
+    if trace is not None:
+        assert isinstance(trace, list)
+
+
+def test_extract_sku_from_message() -> None:
+    from buque.services.expert_agent import extract_sku_from_message
+
+    assert extract_sku_from_message("看看 C0180444 怎么回事") == "C0180444"
+    assert extract_sku_from_message("分析 SKU-001") == "SKU-001"
+
+
+def test_stream_agent_turn_injects_sku_from_message(expert_client) -> None:
+    from claude_agent_sdk import ResultMessage
+
+    from buque.services.expert_agent import stream_agent_turn
+
+    _, factory = expert_client
+    db = factory()
+    user = db.query(User).first()
+    chat_session = ChatSession(user_id=user.id, snapshot_id=1)
+    db.add(chat_session)
+    db.commit()
+    db.refresh(chat_session)
+
+    captured_ctx = {}
+
+    async def fake_receive():
+        yield ResultMessage(
+            subtype="result",
+            duration_ms=1,
+            duration_api_ms=1,
+            is_error=False,
+            num_turns=1,
+            session_id="agent-session-1",
+        )
+
+    fake_client = MagicMock()
+    fake_client.query = AsyncMock()
+    fake_client.receive_response = fake_receive
+
+    fake_cm = MagicMock()
+    fake_cm.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_cm.__aexit__ = AsyncMock(return_value=None)
+
+    def capture_ctx(*args, **kwargs):
+        ctx = build_expert_tool_context(*args, **kwargs)
+        captured_ctx["value"] = ctx
+        return ctx
+
+    from buque.services.expert_tools import build_expert_tool_context
+
+    with patch("buque.services.expert_agent.get_settings") as get_settings:
+        get_settings.return_value = MagicMock(agent_enabled=True)
+        with patch("buque.services.expert_agent.build_expert_tool_context", side_effect=capture_ctx):
+            with patch("buque.services.expert_agent.build_agent_options", return_value=MagicMock()):
+                with patch("buque.services.expert_agent.ClaudeSDKClient", return_value=fake_cm):
+
+                    async def run():
+                        async for _ in stream_agent_turn(db, chat_session, "看看 C0180444 怎么回事"):
+                            pass
+
+                    asyncio.run(run())
+
+    assert captured_ctx["value"].sku == "C0180444"
+
+
+def test_stream_agent_turn_emits_tool_events(expert_client) -> None:
+    from claude_agent_sdk import AssistantMessage, ResultMessage, ToolResultBlock, ToolUseBlock, UserMessage
+
+    from buque.services.expert_agent import stream_agent_turn, tool_label
+
+    _, factory = expert_client
+    db = factory()
+    user = db.query(User).first()
+    chat_session = ChatSession(user_id=user.id, snapshot_id=1)
+    db.add(chat_session)
+    db.commit()
+    db.refresh(chat_session)
+
+    assert tool_label("mcp__buque__list_alerts") == "查询风险清单"
+
+    tool_use = ToolUseBlock(id="t1", name="mcp__buque__list_alerts", input={"level": "red"})
+    tool_result = ToolResultBlock(tool_use_id="t1", content="[]", is_error=False)
+
+    async def fake_receive():
+        yield AssistantMessage(model="test", content=[tool_use])
+        yield UserMessage(content=[tool_result])
+        yield ResultMessage(
+            subtype="result",
+            duration_ms=1,
+            duration_api_ms=1,
+            is_error=False,
+            num_turns=1,
+            session_id="agent-session-1",
+        )
+
+    fake_client = MagicMock()
+    fake_client.query = AsyncMock()
+    fake_client.receive_response = fake_receive
+
+    fake_cm = MagicMock()
+    fake_cm.__aenter__ = AsyncMock(return_value=fake_client)
+    fake_cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("buque.services.expert_agent.get_settings") as get_settings:
+        get_settings.return_value = MagicMock(agent_enabled=True)
+        with patch("buque.services.expert_agent.build_expert_tool_context") as build_ctx:
+            build_ctx.return_value = MagicMock(explanation_draft=None)
+            with patch("buque.services.expert_agent.build_agent_options", return_value=MagicMock()):
+                with patch("buque.services.expert_agent.ClaudeSDKClient", return_value=fake_cm):
+
+                    async def run():
+                        events = []
+                        async for event in stream_agent_turn(db, chat_session, "列出红色预警"):
+                            events.append(event)
+                        return events
+
+                    events = asyncio.run(run())
+
+    tool_events = [event for event in events if event.event == "tool"]
+    tool_result_events = [event for event in events if event.event == "tool_result"]
+    assert tool_events
+    assert tool_events[0].data["tools"][0]["label"] == "查询风险清单"
+    assert tool_events[0].data["tools"][0]["detail"] == "level=red"
+    assert tool_result_events
+    assert tool_result_events[0].data["tool_use_id"] == "t1"
+    assert any(event.event == "status" and event.data.get("phase") == "thinking" for event in events)
+    messages = db.query(ChatMessage).filter(ChatMessage.session_id == chat_session.id).all()
+    trace = (messages[0].message_metadata or {}).get("process_trace")
+    assert any(step.get("kind") == "tool" and step.get("id") == "t1" for step in trace)
+    tool_step = next(step for step in trace if step.get("id") == "t1")
+    assert tool_step.get("detail") == "level=red"
+    assert isinstance((messages[0].message_metadata or {}).get("process_duration_ms"), int)
 
 
 def test_build_expert_tool_context() -> None:
@@ -297,3 +454,26 @@ def test_propose_explanation_draft_tool() -> None:
     )
     server = create_buque_mcp_server(ctx)
     assert server is not None
+
+
+def test_normalize_risk_level_aliases() -> None:
+    from buque.models.entities import RiskLevel
+    from buque.services.expert_queries import normalize_risk_level, normalize_risk_type
+
+    assert normalize_risk_level("red") == RiskLevel.RED
+    assert normalize_risk_level("红色") == RiskLevel.RED
+    assert normalize_risk_level("invalid") is None
+    assert normalize_risk_type("断货") == RiskType.STOCKOUT
+    assert normalize_risk_type("unknown") is None
+
+
+def test_fetch_alerts_invalid_level_returns_allowed(expert_client) -> None:
+    from buque.services.expert_queries import fetch_alerts
+
+    _, factory = expert_client
+    db = factory()
+    result = fetch_alerts(db, 1, level="not-a-level")
+    assert result["error"]
+    assert "RED" in result["allowed_levels"]
+    assert result["items"] == []
+    db.close()
