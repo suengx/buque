@@ -1,12 +1,15 @@
 # 无备案域名、IP 访问：HTTP only，由 SITE_URL 驱动 CORS 与前端构建参数。
 # 与 1Panel 同机时若 80 被占用，将 caddy.ports 改为 "8080:80"，SITE_URL=http://<IP>:8080
-x-docker-registry: &docker-registry
+x-backend-build-args: &backend-build-args
   DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX}
+  DEBIAN_APT_MIRROR: ${DEBIAN_APT_MIRROR:-}
+  UV_INDEX_URL: ${UV_INDEX_URL:-}
+  PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
 
 x-backend-build: &backend-build
   context: ./backend
   args:
-    <<: *docker-registry
+    <<: *backend-build-args
 
 x-backend-env: &backend-env
   POSTGRES_HOST: postgres
@@ -79,7 +82,8 @@ services:
     build:
       context: ./frontend
       args:
-        <<: *docker-registry
+        DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
         VITE_API_BASE_URL: ${SITE_URL:?set SITE_URL}/api/v1
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
         VITE_AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}

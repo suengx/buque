@@ -55,17 +55,17 @@ docker ps
 
 若仍提示 permission denied，再执行 `sudo chown -R "$USER":"$USER" /opt/buque`。
 
-### 1.1 Docker 镜像拉取
-
-**腾讯云 ECS** 在 `.env` 中设置（本地 Mac 不要写）：
+### 1.1 国内构建加速（ECS `.env` 建议配置）
 
 ```bash
 DOCKER_REGISTRY_PREFIX=mirror.ccs.tencentyun.com/library/
+DEBIAN_APT_MIRROR=mirrors.tencent.com
+UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+NPM_REGISTRY=https://registry.npmmirror.com
 ```
 
-未设置时直连 `docker.io`（适合本地）；ECS 上不设会拉取超时。
-
-仅当已设置仍超时时，再执行兜底：`sudo bash deploy/configure-docker-mirror.sh`
+避免 `apt-get update` / `pip` / Playwright / npm 卡在境外源。本地 `make docker-ip-*` 会自动禁用上述项。
 
 ---
 

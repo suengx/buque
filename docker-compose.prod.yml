@@ -1,11 +1,14 @@
 # 生产栈：.env 保持开发默认值即可；下列 x-backend-env / web build args 按 DOMAIN 自动覆盖。
-x-docker-registry: &docker-registry
+x-backend-build-args: &backend-build-args
   DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX}
+  DEBIAN_APT_MIRROR: ${DEBIAN_APT_MIRROR:-}
+  UV_INDEX_URL: ${UV_INDEX_URL:-}
+  PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
 
 x-backend-build: &backend-build
   context: ./backend
   args:
-    <<: *docker-registry
+    <<: *backend-build-args
 
 x-backend-env: &backend-env
   POSTGRES_HOST: postgres
@@ -78,7 +81,8 @@ services:
     build:
       context: ./frontend
       args:
-        <<: *docker-registry
+        DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
         VITE_API_BASE_URL: https://${DOMAIN:?set DOMAIN}/api/v1
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
         VITE_AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}

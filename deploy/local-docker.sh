@@ -6,8 +6,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 COMPOSE="docker compose -f docker-compose.ip.yml"
 
-# 本地：强制直连 docker.io（覆盖 .env 里为 ECS 配置的 DOCKER_REGISTRY_PREFIX）
+# 本地：强制直连 docker.io（覆盖 .env 里为 ECS 配置的镜像/构建加速项）
 export DOCKER_REGISTRY_PREFIX=
+export DEBIAN_APT_MIRROR=
+export UV_INDEX_URL=
+export PLAYWRIGHT_DOWNLOAD_HOST=
+export NPM_REGISTRY=
 export SITE_URL=http://localhost:8080
 export HTTP_PORT=8080
 

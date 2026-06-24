@@ -1,11 +1,13 @@
 ARG DOCKER_REGISTRY_PREFIX=
+ARG NPM_REGISTRY=
 
 FROM ${DOCKER_REGISTRY_PREFIX}node:22-bookworm-slim AS build
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi \
+    && npm ci
 
 COPY . .
 
@@ -20,6 +22,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
 RUN npm run build
 
 ARG DOCKER_REGISTRY_PREFIX=
+ARG NPM_REGISTRY=
 FROM ${DOCKER_REGISTRY_PREFIX}node:22-bookworm-slim
 
 WORKDIR /app
@@ -28,7 +31,8 @@ ENV NODE_ENV=production \
     PORT=3000
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi \
+    && npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
