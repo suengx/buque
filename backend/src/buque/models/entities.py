@@ -350,6 +350,35 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ChatSession(Base):
+    __tablename__ = "chat_session"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), index=True)
+    snapshot_id: Mapped[int] = mapped_column(Integer, ForeignKey("erp_sync_job.id"), index=True)
+    sku: Mapped[str | None] = mapped_column(String(64))
+    warehouse: Mapped[str | None] = mapped_column(String(128))
+    title: Mapped[str | None] = mapped_column(String(255))
+    agent_session_id: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_message"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("chat_session.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    message_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DataQualityIssue(Base):
     __tablename__ = "data_quality_issue"
 

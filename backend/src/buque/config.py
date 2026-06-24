@@ -1,7 +1,6 @@
 from functools import lru_cache
 import logging
 import secrets
-from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import field_validator
@@ -28,11 +27,11 @@ class Settings(BaseSettings):
     erp_password: str = ""
     erp_web_prefix: str = "/amzv-web"
 
-    llm_api_base: str = ""
-    llm_api_key: str = ""
-    llm_model: str = "gpt-4o-mini"
-    # off=仅规则解释；on_demand=单 SKU 深读可调 LLM；批量分析永不调 LLM
-    llm_explain_mode: Literal["off", "on_demand"] = "on_demand"
+    anthropic_auth_token: str = ""
+    anthropic_base_url: str = ""
+    agent_model: str = "qwen3.5-flash"
+    stream_mode: bool = True
+    agent_max_turns: int = 8
 
     data_dir: str = "data"
     export_dir: str = "data/exports"
@@ -65,6 +64,10 @@ class Settings(BaseSettings):
     @property
     def google_auth_enabled(self) -> bool:
         return bool(self.google_client_id)
+
+    @property
+    def agent_enabled(self) -> bool:
+        return bool(self.anthropic_auth_token and self.anthropic_base_url)
 
     @property
     def erp_job_stale_seconds(self) -> int:

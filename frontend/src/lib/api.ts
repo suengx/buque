@@ -119,19 +119,6 @@ export type SkuDetail = {
   require_human_confirm: boolean
 }
 
-export type AgentExplainResult = {
-  primary_explanation: string
-  secondary_explanation: string | null
-  tertiary_explanation: string | null
-  explanation_tags: string[]
-  key_evidence: string[]
-  suggested_action: string
-  responsible_role: string | null
-  action_deadline: string | null
-  require_human_confirm: boolean
-  confidence_note: string | null
-}
-
 export type FeedbackStats = {
   total: number
   adopted: number
@@ -260,15 +247,6 @@ export const api = {
     if (opts?.snapshotId) q.set('snapshot_id', String(opts.snapshotId))
     const suffix = q.toString() ? `?${q}` : ''
     return request<SkuDetail>(`/alerts/${sku}${suffix}`)
-  },
-  agentExplainSku: (sku: string, opts?: { warehouse?: string; snapshotId?: number }) => {
-    const q = new URLSearchParams()
-    if (opts?.warehouse) q.set('warehouse', opts.warehouse)
-    if (opts?.snapshotId) q.set('snapshot_id', String(opts.snapshotId))
-    const suffix = q.toString() ? `?${q}` : ''
-    return request<AgentExplainResult>(`/alerts/${encodeURIComponent(sku)}/agent-explain${suffix}`, {
-      method: 'POST',
-    })
   },
   createFeedback: (body: Record<string, unknown>) =>
     request('/feedback', { method: 'POST', body: JSON.stringify(body) }),

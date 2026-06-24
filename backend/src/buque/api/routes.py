@@ -20,7 +20,6 @@ from buque.models.entities import (
     RiskType,
 )
 from buque.schemas.api import (
-    AgentExplainOut,
     AlertsMetaOut,
     DailyReportSummary,
     FeedbackCreate,
@@ -33,7 +32,6 @@ from buque.schemas.api import (
     TrendComparison,
     TrendPoint,
 )
-from buque.services.monitor_pipeline import ExplainerAgent
 from buque.services.snapshot_query import (
     get_snapshot,
     latest_snapshot_for_date,
@@ -429,35 +427,6 @@ def sku_detail(
         action_deadline=explain.action_deadline if explain else None,
         require_human_confirm=explain.require_human_confirm if explain else False,
     )
-
-
-@router.post("/alerts/{sku_id}/agent-explain", response_model=AgentExplainOut)
-def agent_explain_sku(
-    sku_id: str,
-    snapshot_id: int | None = None,
-    warehouse: str | None = None,
-    db: Session = Depends(get_db),
-) -> AgentExplainOut:
-    sid = resolve_snapshot_id(db, snapshot_id)
-    job = get_snapshot(db, sid)
-    exists = (
-        db.query(FactMonitorResult)
-        .filter(
-            FactMonitorResult.snapshot_id == sid,
-            FactMonitorResult.sku == sku_id,
-            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-        )
-        .first()
-    )
-    if not exists:
-        raise HTTPException(status_code=404, detail="SKU 监控结果不存在")
-    try:
-        payload = ExplainerAgent(db).explain_sku_on_demand(
-            job.monitor_date, sid, sku_id, warehouse
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return AgentExplainOut(**payload)
 
 
 @router.post("/feedback", response_model=FeedbackOut)

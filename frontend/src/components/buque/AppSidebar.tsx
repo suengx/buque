@@ -1,10 +1,11 @@
 import { Link, useNavigate } from '@tanstack/react-router'
-import { AlertTriangle, LayoutDashboard, LogOut, MessageSquare, Sliders } from 'lucide-react'
+import { AlertTriangle, Bot, LayoutDashboard, LogOut, MessageSquare, Sliders } from 'lucide-react'
 import { useAuth } from '#/context/AuthContext'
 
 const nav = [
   { to: '/', label: '日报总览', icon: LayoutDashboard },
   { to: '/alerts', label: '风险预警', icon: AlertTriangle },
+  { to: '/chat', label: '监控助手', icon: Bot },
   { to: '/feedback', label: '人工反馈', icon: MessageSquare },
   { to: '/settings/rules', label: '规则配置', icon: Sliders },
 ]

@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppFeedbackIndexRouteImport } from './routes/_app/feedback/index'
+import { Route as AppChatIndexRouteImport } from './routes/_app/chat/index'
 import { Route as AppAlertsIndexRouteImport } from './routes/_app/alerts/index'
 import { Route as AppSettingsRulesIndexRouteImport } from './routes/_app/settings/rules/index'
 
@@ -35,6 +36,11 @@ const AppFeedbackIndexRoute = AppFeedbackIndexRouteImport.update({
   path: '/feedback/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppChatIndexRoute = AppChatIndexRouteImport.update({
+  id: '/chat/',
+  path: '/chat/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAlertsIndexRoute = AppAlertsIndexRouteImport.update({
   id: '/alerts/',
   path: '/alerts/',
@@ -50,6 +56,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login/': typeof LoginIndexRoute
   '/alerts/': typeof AppAlertsIndexRoute
+  '/chat/': typeof AppChatIndexRoute
   '/feedback/': typeof AppFeedbackIndexRoute
   '/settings/rules/': typeof AppSettingsRulesIndexRoute
 }
@@ -57,6 +64,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/login': typeof LoginIndexRoute
   '/alerts': typeof AppAlertsIndexRoute
+  '/chat': typeof AppChatIndexRoute
   '/feedback': typeof AppFeedbackIndexRoute
   '/settings/rules': typeof AppSettingsRulesIndexRoute
 }
@@ -66,20 +74,28 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/login/': typeof LoginIndexRoute
   '/_app/alerts/': typeof AppAlertsIndexRoute
+  '/_app/chat/': typeof AppChatIndexRoute
   '/_app/feedback/': typeof AppFeedbackIndexRoute
   '/_app/settings/rules/': typeof AppSettingsRulesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login/' | '/alerts/' | '/feedback/' | '/settings/rules/'
+  fullPaths:
+    | '/'
+    | '/login/'
+    | '/alerts/'
+    | '/chat/'
+    | '/feedback/'
+    | '/settings/rules/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/alerts' | '/feedback' | '/settings/rules'
+  to: '/' | '/login' | '/alerts' | '/chat' | '/feedback' | '/settings/rules'
   id:
     | '__root__'
     | '/_app'
     | '/_app/'
     | '/login/'
     | '/_app/alerts/'
+    | '/_app/chat/'
     | '/_app/feedback/'
     | '/_app/settings/rules/'
   fileRoutesById: FileRoutesById
@@ -119,6 +135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFeedbackIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/chat/': {
+      id: '/_app/chat/'
+      path: '/chat'
+      fullPath: '/chat/'
+      preLoaderRoute: typeof AppChatIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/alerts/': {
       id: '/_app/alerts/'
       path: '/alerts'
@@ -139,6 +162,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppAlertsIndexRoute: typeof AppAlertsIndexRoute
+  AppChatIndexRoute: typeof AppChatIndexRoute
   AppFeedbackIndexRoute: typeof AppFeedbackIndexRoute
   AppSettingsRulesIndexRoute: typeof AppSettingsRulesIndexRoute
 }
@@ -146,6 +170,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppAlertsIndexRoute: AppAlertsIndexRoute,
+  AppChatIndexRoute: AppChatIndexRoute,
   AppFeedbackIndexRoute: AppFeedbackIndexRoute,
   AppSettingsRulesIndexRoute: AppSettingsRulesIndexRoute,
 }

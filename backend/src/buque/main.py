@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from buque.api.admin import router as admin_router
 from buque.api.auth import router as auth_router
+from buque.api.expert import router as expert_router
 from buque.api.rules import router as rules_router
 from buque.api.routes import public_router, router
 from buque.config import get_settings
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
     app.include_router(public_router)
     app.include_router(router)
     app.include_router(auth_router)
+    app.include_router(expert_router)
     app.include_router(admin_router)
     app.include_router(rules_router)
     return app

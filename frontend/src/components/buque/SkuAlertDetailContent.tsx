@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquarePlus } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Bot, MessageSquarePlus } from 'lucide-react'
 import { api, queryKeys } from '#/lib/api'
 import { riskTypeLabel } from '#/lib/labels'
 import { humanEvidenceLines } from '#/lib/trigger-metrics'
@@ -38,37 +38,18 @@ function ExplanationLayer({
 
 export function SkuAlertDetailContent({ sku, warehouse }: Props) {
   const { selectedSnapshotId } = useSnapshot()
-  const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.skuDetail(sku, selectedSnapshotId, warehouse),
     queryFn: () => api.skuDetail(sku, { warehouse, snapshotId: selectedSnapshotId }),
     enabled: selectedSnapshotId !== undefined,
   })
 
-  const agentExplain = useMutation({
-    mutationFn: () =>
-      api.agentExplainSku(sku, {
-        warehouse,
-        snapshotId: selectedSnapshotId,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.skuDetail(sku, selectedSnapshotId, warehouse),
-      })
-    },
-  })
-
   if (isLoading) return <div className="demo-muted py-8 text-center text-sm">加载 SKU 分析卡…</div>
   if (error) return <div className="py-8 text-center text-sm text-[var(--status-danger)]">无法加载 SKU 详情。</div>
   if (!data) return null
 
-  const explain = agentExplain.data
-  const tags = explain?.explanation_tags ?? data.explanation_tags ?? []
-  const evidenceLines = humanEvidenceLines(explain?.key_evidence ?? data.key_evidence)
-
-  const primary = explain?.primary_explanation ?? data.primary_explanation
-  const secondary = explain?.secondary_explanation ?? data.secondary_explanation
-  const tertiary = explain?.tertiary_explanation ?? data.tertiary_explanation
+  const tags = data.explanation_tags ?? []
+  const evidenceLines = humanEvidenceLines(data.key_evidence)
 
   return (
     <div className="space-y-4">
@@ -87,14 +68,21 @@ export function SkuAlertDetailContent({ sku, warehouse }: Props) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="demo-button demo-button-sm"
-            disabled={agentExplain.isPending}
-            onClick={() => agentExplain.mutate()}
-          >
-            {agentExplain.isPending ? 'Agent 分析中…' : 'Agent 深度分析'}
-          </button>
+          {selectedSnapshotId !== undefined ? (
+            <Link
+              to="/chat"
+              search={{
+                snapshot_id: selectedSnapshotId,
+                sku: data.sku,
+                warehouse: warehouse ?? data.warehouse ?? undefined,
+                seed: 'deep_analysis',
+              }}
+              className="demo-button demo-button-sm no-underline"
+            >
+              <Bot size={16} />
+              在监控助手中分析
+            </Link>
+          ) : null}
           <Link
             to="/feedback"
             search={{
@@ -143,19 +131,17 @@ export function SkuAlertDetailContent({ sku, warehouse }: Props) {
 
           <GlassCard>
             <h2 className="demo-section-title mb-3">解释</h2>
-            {agentExplain.error ? (
-              <p className="mb-3 text-sm text-[var(--status-danger)]">
-                深度分析失败：{(agentExplain.error as Error).message}
-              </p>
+            {data.primary_explanation ? (
+              <ExplanationLayer title="主解释" text={data.primary_explanation} emphasis />
             ) : null}
-            {primary ? <ExplanationLayer title="主解释" text={primary} emphasis /> : null}
-            {secondary ? <ExplanationLayer title="次解释" text={secondary} /> : null}
-            {tertiary ? <ExplanationLayer title="第三解释" text={tertiary} /> : null}
-            {!primary && !secondary && !tertiary ? (
+            {data.secondary_explanation ? (
+              <ExplanationLayer title="次解释" text={data.secondary_explanation} />
+            ) : null}
+            {data.tertiary_explanation ? (
+              <ExplanationLayer title="第三解释" text={data.tertiary_explanation} />
+            ) : null}
+            {!data.primary_explanation && !data.secondary_explanation && !data.tertiary_explanation ? (
               <p className="text-sm demo-muted">暂无解释内容</p>
-            ) : null}
-            {explain?.confidence_note ? (
-              <p className="mt-3 text-xs demo-muted">{explain.confidence_note}</p>
             ) : null}
             {evidenceLines.length > 0 ? (
               <div className="mt-4 border-t border-[var(--hairline)] pt-3">
@@ -168,7 +154,7 @@ export function SkuAlertDetailContent({ sku, warehouse }: Props) {
           <GlassCard>
             <h2 className="demo-section-title mb-3">建议动作</h2>
             <p className="text-sm leading-relaxed text-[var(--sea-ink)]">
-              {explain?.suggested_action ?? data.suggested_action ?? '—'}
+              {data.suggested_action ?? '—'}
             </p>
           </GlassCard>
         </div>
@@ -178,15 +164,15 @@ export function SkuAlertDetailContent({ sku, warehouse }: Props) {
           <dl className="buque-detail-meta">
             <div className="buque-detail-meta-row">
               <dt>责任角色</dt>
-              <dd>{explain?.responsible_role ?? data.responsible_role ?? '—'}</dd>
+              <dd>{data.responsible_role ?? '—'}</dd>
             </div>
             <div className="buque-detail-meta-row">
               <dt>建议时效</dt>
-              <dd>{explain?.action_deadline ?? data.action_deadline ?? '—'}</dd>
+              <dd>{data.action_deadline ?? '—'}</dd>
             </div>
             <div className="buque-detail-meta-row">
               <dt>须人工确认</dt>
-              <dd>{(explain?.require_human_confirm ?? data.require_human_confirm) ? '是' : '否'}</dd>
+              <dd>{data.require_human_confirm ? '是' : '否'}</dd>
             </div>
             <div className="buque-detail-meta-row">
               <dt>业务日</dt>
