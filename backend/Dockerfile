@@ -1,7 +1,9 @@
+# ARG 须在首个 FROM 之前声明，供各阶段 FROM 使用
+ARG DOCKER_REGISTRY_PREFIX=
+
 FROM ghcr.io/astral-sh/uv:latest AS uv
 
-ARG DOCKER_REGISTRY_PREFIX=
-FROM ${DOCKER_REGISTRY_PREFIX}python:3.12-bookworm-slim
+FROM ${DOCKER_REGISTRY_PREFIX}python:3.12-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
