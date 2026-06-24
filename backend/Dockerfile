@@ -1,34 +1,31 @@
-# ARG 须在首个 FROM 之前声明，供各阶段 FROM 使用
+# ARG 须在首个 FROM 之前声明
 ARG DOCKER_REGISTRY_PREFIX=
-
-FROM ghcr.io/astral-sh/uv:latest AS uv
 
 FROM ${DOCKER_REGISTRY_PREFIX}python:3.12-slim-bookworm
 
 ARG DEBIAN_APT_MIRROR=
 ARG UV_INDEX_URL=
 ARG PLAYWRIGHT_DOWNLOAD_HOST=
+ARG PLAYWRIGHT_DOWNLOAD_BASE_URL=
 
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_INDEX_URL=${UV_INDEX_URL} \
-    PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
+    PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
+    PLAYWRIGHT_DOWNLOAD_BASE_URL=${PLAYWRIGHT_DOWNLOAD_BASE_URL}
 
-RUN set -eux; \
-    if [ -n "$DEBIAN_APT_MIRROR" ]; then \
-      for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do \
-        if [ -f "$f" ]; then \
-          sed -i "s|deb.debian.org|${DEBIAN_APT_MIRROR}|g" "$f"; \
-          sed -i "s|security.debian.org|${DEBIAN_APT_MIRROR}|g" "$f"; \
-        fi; \
-      done; \
-    fi; \
-    apt-get update \
+COPY docker/setup-apt-mirror.sh /tmp/setup-apt-mirror.sh
+
+RUN DEBIAN_APT_MIRROR="$DEBIAN_APT_MIRROR" sh /tmp/setup-apt-mirror.sh \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=uv /uv /uvx /bin/
+    && rm -rf /var/lib/apt/lists/* \
+    && if [ -n "$UV_INDEX_URL" ]; then \
+         pip install --no-cache-dir uv -i "$UV_INDEX_URL"; \
+       else \
+         pip install --no-cache-dir uv; \
+       fi
 
 WORKDIR /app
 

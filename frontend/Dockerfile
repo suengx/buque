@@ -1,7 +1,15 @@
 ARG DOCKER_REGISTRY_PREFIX=
+ARG DEBIAN_APT_MIRROR=
 ARG NPM_REGISTRY=
 
 FROM ${DOCKER_REGISTRY_PREFIX}node:22-bookworm-slim AS build
+
+COPY docker/setup-apt-mirror.sh /tmp/setup-apt-mirror.sh
+
+RUN DEBIAN_APT_MIRROR="$DEBIAN_APT_MIRROR" sh /tmp/setup-apt-mirror.sh \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -22,8 +30,16 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
 RUN npm run build
 
 ARG DOCKER_REGISTRY_PREFIX=
+ARG DEBIAN_APT_MIRROR=
 ARG NPM_REGISTRY=
 FROM ${DOCKER_REGISTRY_PREFIX}node:22-bookworm-slim
+
+COPY docker/setup-apt-mirror.sh /tmp/setup-apt-mirror.sh
+
+RUN DEBIAN_APT_MIRROR="$DEBIAN_APT_MIRROR" sh /tmp/setup-apt-mirror.sh \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

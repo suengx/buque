@@ -5,6 +5,12 @@ x-backend-build-args: &backend-build-args
   DEBIAN_APT_MIRROR: ${DEBIAN_APT_MIRROR:-}
   UV_INDEX_URL: ${UV_INDEX_URL:-}
   PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
+  PLAYWRIGHT_DOWNLOAD_BASE_URL: ${PLAYWRIGHT_DOWNLOAD_BASE_URL:-}
+
+x-frontend-build-args: &frontend-build-args
+  DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX}
+  DEBIAN_APT_MIRROR: ${DEBIAN_APT_MIRROR:-}
+  NPM_REGISTRY: ${NPM_REGISTRY:-}
 
 x-backend-build: &backend-build
   context: ./backend
@@ -82,8 +88,7 @@ services:
     build:
       context: ./frontend
       args:
-        DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX}
-        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        <<: *frontend-build-args
         VITE_API_BASE_URL: ${SITE_URL:?set SITE_URL}/api/v1
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
         VITE_AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}

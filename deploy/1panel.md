@@ -55,17 +55,35 @@ docker ps
 
 若仍提示 permission denied，再执行 `sudo chown -R "$USER":"$USER" /opt/buque`。
 
-### 1.1 国内构建加速（ECS `.env` 建议配置）
+### 1.1 国内构建加速（ECS `.env` 整组配置）
 
 ```bash
 DOCKER_REGISTRY_PREFIX=mirror.ccs.tencentyun.com/library/
 DEBIAN_APT_MIRROR=mirrors.tencent.com
 UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+PLAYWRIGHT_DOWNLOAD_BASE_URL=https://npmmirror.com/mirrors/playwright
 NPM_REGISTRY=https://registry.npmmirror.com
 ```
 
-避免 `apt-get update` / `pip` / Playwright / npm 卡在境外源。本地 `make docker-ip-*` 会自动禁用上述项。
+| 变量 | 覆盖环节 |
+|------|----------|
+| `DOCKER_REGISTRY_PREFIX` | 拉取 python / node / postgres / caddy 基础镜像 |
+| `DEBIAN_APT_MIRROR` | backend + frontend 镜像内 `apt-get`（含 Playwright `--with-deps`） |
+| `UV_INDEX_URL` | `uv` 自举 + `uv sync` Python 依赖 |
+| `PLAYWRIGHT_*` | Chromium 浏览器二进制下载 |
+| `NPM_REGISTRY` | 前端 `npm ci` |
+
+本地 `make docker-ip-*` 会自动清空上述项。仍失败可执行 `sudo bash deploy/configure-docker-mirror.sh` 配置守护进程级 Docker 加速。
+
+### 1.2 运行时外网（构建完成后）
+
+| 环节 | 目标 | 说明 |
+|------|------|------|
+| ERP 日批 | 积加 ERP | ECS 须能访问 `ERP_BASE_URL` |
+| 监控助手 | `ANTHROPIC_BASE_URL` | 如 DashScope，走 API 非构建 |
+| HTTPS（备案后） | Let's Encrypt | `docker-compose.prod.yml` + 域名 |
+| 代码更新 | `git pull` / rsync | GitHub 不稳时用 rsync（见文末） |
 
 ---
 
