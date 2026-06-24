@@ -12,7 +12,7 @@ type FeedbackSearch = {
   risk_type?: string
 }
 
-export const Route = createFileRoute('/feedback/')({
+export const Route = createFileRoute('/_app/feedback/')({
   validateSearch: (search: Record<string, unknown>): FeedbackSearch => ({
     sku: (search.sku as string) || undefined,
     risk_type: (search.risk_type as string) || undefined,

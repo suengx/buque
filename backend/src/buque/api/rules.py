@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from buque.api.deps import auth_router_dependencies
 from buque.db import get_db
 from buque.schemas.api import (
     MetricLabelsOut,
@@ -20,7 +21,11 @@ from buque.services.rule_config_admin import (
 )
 from buque.services.rule_metric_labels import build_metric_labels, build_rules_grouped
 
-router = APIRouter(prefix="/api/v1/rules", tags=["rules"])
+router = APIRouter(
+    prefix="/api/v1/rules",
+    tags=["rules"],
+    dependencies=auth_router_dependencies(),
+)
 
 
 @router.get("", response_model=RulesGroupedOut)

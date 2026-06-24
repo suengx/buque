@@ -9,104 +9,152 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as FeedbackIndexRouteImport } from './routes/feedback/index'
-import { Route as AlertsIndexRouteImport } from './routes/alerts/index'
-import { Route as SettingsRulesIndexRouteImport } from './routes/settings/rules/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as LoginIndexRouteImport } from './routes/login/index'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppFeedbackIndexRouteImport } from './routes/_app/feedback/index'
+import { Route as AppAlertsIndexRouteImport } from './routes/_app/alerts/index'
+import { Route as AppSettingsRulesIndexRouteImport } from './routes/_app/settings/rules/index'
 
-const IndexRoute = IndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginIndexRoute = LoginIndexRouteImport.update({
+  id: '/login/',
+  path: '/login/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const FeedbackIndexRoute = FeedbackIndexRouteImport.update({
+const AppFeedbackIndexRoute = AppFeedbackIndexRouteImport.update({
   id: '/feedback/',
   path: '/feedback/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const AlertsIndexRoute = AlertsIndexRouteImport.update({
+const AppAlertsIndexRoute = AppAlertsIndexRouteImport.update({
   id: '/alerts/',
   path: '/alerts/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
-const SettingsRulesIndexRoute = SettingsRulesIndexRouteImport.update({
+const AppSettingsRulesIndexRoute = AppSettingsRulesIndexRouteImport.update({
   id: '/settings/rules/',
   path: '/settings/rules/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/alerts/': typeof AlertsIndexRoute
-  '/feedback/': typeof FeedbackIndexRoute
-  '/settings/rules/': typeof SettingsRulesIndexRoute
+  '/': typeof AppIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/alerts/': typeof AppAlertsIndexRoute
+  '/feedback/': typeof AppFeedbackIndexRoute
+  '/settings/rules/': typeof AppSettingsRulesIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/alerts': typeof AlertsIndexRoute
-  '/feedback': typeof FeedbackIndexRoute
-  '/settings/rules': typeof SettingsRulesIndexRoute
+  '/': typeof AppIndexRoute
+  '/login': typeof LoginIndexRoute
+  '/alerts': typeof AppAlertsIndexRoute
+  '/feedback': typeof AppFeedbackIndexRoute
+  '/settings/rules': typeof AppSettingsRulesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/alerts/': typeof AlertsIndexRoute
-  '/feedback/': typeof FeedbackIndexRoute
-  '/settings/rules/': typeof SettingsRulesIndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_app/': typeof AppIndexRoute
+  '/login/': typeof LoginIndexRoute
+  '/_app/alerts/': typeof AppAlertsIndexRoute
+  '/_app/feedback/': typeof AppFeedbackIndexRoute
+  '/_app/settings/rules/': typeof AppSettingsRulesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/alerts/' | '/feedback/' | '/settings/rules/'
+  fullPaths: '/' | '/login/' | '/alerts/' | '/feedback/' | '/settings/rules/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/alerts' | '/feedback' | '/settings/rules'
-  id: '__root__' | '/' | '/alerts/' | '/feedback/' | '/settings/rules/'
+  to: '/' | '/login' | '/alerts' | '/feedback' | '/settings/rules'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/_app/'
+    | '/login/'
+    | '/_app/alerts/'
+    | '/_app/feedback/'
+    | '/_app/settings/rules/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AlertsIndexRoute: typeof AlertsIndexRoute
-  FeedbackIndexRoute: typeof FeedbackIndexRoute
-  SettingsRulesIndexRoute: typeof SettingsRulesIndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  LoginIndexRoute: typeof LoginIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login/': {
+      id: '/login/'
+      path: '/login'
+      fullPath: '/login/'
+      preLoaderRoute: typeof LoginIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/feedback/': {
-      id: '/feedback/'
+    '/_app/feedback/': {
+      id: '/_app/feedback/'
       path: '/feedback'
       fullPath: '/feedback/'
-      preLoaderRoute: typeof FeedbackIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppFeedbackIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/alerts/': {
-      id: '/alerts/'
+    '/_app/alerts/': {
+      id: '/_app/alerts/'
       path: '/alerts'
       fullPath: '/alerts/'
-      preLoaderRoute: typeof AlertsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppAlertsIndexRouteImport
+      parentRoute: typeof AppRoute
     }
-    '/settings/rules/': {
-      id: '/settings/rules/'
+    '/_app/settings/rules/': {
+      id: '/_app/settings/rules/'
       path: '/settings/rules'
       fullPath: '/settings/rules/'
-      preLoaderRoute: typeof SettingsRulesIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppSettingsRulesIndexRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
+interface AppRouteChildren {
+  AppIndexRoute: typeof AppIndexRoute
+  AppAlertsIndexRoute: typeof AppAlertsIndexRoute
+  AppFeedbackIndexRoute: typeof AppFeedbackIndexRoute
+  AppSettingsRulesIndexRoute: typeof AppSettingsRulesIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppIndexRoute: AppIndexRoute,
+  AppAlertsIndexRoute: AppAlertsIndexRoute,
+  AppFeedbackIndexRoute: AppFeedbackIndexRoute,
+  AppSettingsRulesIndexRoute: AppSettingsRulesIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AlertsIndexRoute: AlertsIndexRoute,
-  FeedbackIndexRoute: FeedbackIndexRoute,
-  SettingsRulesIndexRoute: SettingsRulesIndexRoute,
+  AppRoute: AppRouteWithChildren,
+  LoginIndexRoute: LoginIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

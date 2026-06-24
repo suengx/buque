@@ -6,6 +6,7 @@ from datetime import date
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from buque.api.deps import auth_router_dependencies
 from buque.config import get_settings
 from buque.db import SessionLocal, get_db
 from buque.schemas.api import (
@@ -28,7 +29,11 @@ from buque.services.sync_pipeline import run_full_pipeline, run_pipeline_job
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/api/v1/admin",
+    tags=["admin"],
+    dependencies=auth_router_dependencies(),
+)
 
 
 def _run_pipeline_background(monitor_date: date, job_id: int) -> None:

@@ -3,9 +3,11 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  useRouterState,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { AuthProvider } from '../context/AuthContext'
 import { SnapshotProvider } from '../context/SnapshotContext'
 import AppSidebar from '../components/buque/AppSidebar'
 import { ContextDock } from '../components/buque/ContextDock'
@@ -36,17 +38,9 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body className="font-sans antialiased">
-        <SnapshotProvider>
-          <AppSidebar />
-          <main className="min-h-screen pl-60">
-            <ContextDock />
-            <div className="px-6 py-5">
-              <div className="page-content">
-                <Outlet />
-              </div>
-            </div>
-          </main>
-        </SnapshotProvider>
+        <AuthProvider>
+          <AppShell />
+        </AuthProvider>
         <TanStackDevtools
           config={{ position: 'bottom-right' }}
           plugins={[
@@ -57,5 +51,28 @@ function RootDocument() {
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function AppShell() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const isLogin = pathname === '/login' || pathname.startsWith('/login/')
+
+  if (isLogin) {
+    return <Outlet />
+  }
+
+  return (
+    <SnapshotProvider>
+      <AppSidebar />
+      <main className="min-h-screen pl-60">
+        <ContextDock />
+        <div className="px-6 py-5">
+          <div className="page-content">
+            <Outlet />
+          </div>
+        </div>
+      </main>
+    </SnapshotProvider>
   )
 }

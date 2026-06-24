@@ -1,5 +1,6 @@
-import { Link } from '@tanstack/react-router'
-import { AlertTriangle, LayoutDashboard, MessageSquare, Sliders } from 'lucide-react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { AlertTriangle, LayoutDashboard, LogOut, MessageSquare, Sliders } from 'lucide-react'
+import { useAuth } from '#/context/AuthContext'
 
 const nav = [
   { to: '/', label: '日报总览', icon: LayoutDashboard },
@@ -9,6 +10,16 @@ const nav = [
 ]
 
 export default function AppSidebar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const displayName = user?.display_name || user?.email || '用户'
+
+  const handleLogout = () => {
+    logout()
+    void navigate({ to: '/login' })
+  }
+
   return (
     <aside className="sidebar-shell sidebar-shell-dark fixed inset-y-0 left-0 z-40 flex w-60 flex-col">
       <div className="sidebar-brand-block">
@@ -30,7 +41,18 @@ export default function AppSidebar() {
           </Link>
         ))}
       </nav>
-      <div className="sidebar-footer-minimal">计划监控</div>
+      <div className="sidebar-user-block">
+        <div className="sidebar-user-meta">
+          <div className="sidebar-user-name">{displayName}</div>
+          {user?.email && user.display_name ? (
+            <div className="sidebar-user-email">{user.email}</div>
+          ) : null}
+        </div>
+        <button type="button" className="sidebar-logout" onClick={handleLogout}>
+          <LogOut size={14} strokeWidth={2} />
+          退出
+        </button>
+      </div>
     </aside>
   )
 }

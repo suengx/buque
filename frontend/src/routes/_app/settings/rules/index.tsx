@@ -14,7 +14,7 @@ type RulesSearch = {
 
 const RISK_CATEGORIES = new Set(['stockout', 'slow_moving', 'sales', 'inbound', 'upgrade'])
 
-export const Route = createFileRoute('/settings/rules/')({
+export const Route = createFileRoute('/_app/settings/rules/')({
   validateSearch: (search: Record<string, unknown>): RulesSearch => ({
     focus: (search.focus as string) || undefined,
   }),

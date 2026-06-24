@@ -18,7 +18,7 @@ import { MetricCard } from '#/components/buque/MetricCard'
 import { PageHeader } from '#/components/buque/PageHeader'
 import { SectionBlock } from '#/components/buque/SectionBlock'
 
-export const Route = createFileRoute('/')({
+export const Route = createFileRoute('/_app/')({
   component: DailyReportPage,
 })
 

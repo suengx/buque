@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from buque.api.deps import auth_router_dependencies
 from buque.config import get_settings
 from buque.db import get_db
 from buque.models.entities import (
@@ -40,7 +41,8 @@ from buque.services.snapshot_query import (
     resolve_snapshot_id,
 )
 
-router = APIRouter(prefix="/api/v1")
+public_router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=auth_router_dependencies())
 
 
 def _explain_for(db: Session, snapshot_id: int, sku: str) -> FactAgentExplain | None:
@@ -145,7 +147,7 @@ def _format_snapshot_time(finished_at) -> str:
     return finished_at.astimezone(tz).strftime("%m/%d %H:%M")
 
 
-@router.get("/health")
+@public_router.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "buque"}
 

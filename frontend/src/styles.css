@@ -2082,3 +2082,251 @@ a {
     background: color-mix(in oklab, var(--aqua) 6%, transparent);
   }
 }
+
+/* Auth */
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .auth-shell {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.auth-brand-panel {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--palm) 88%, #0a3d35) 0%,
+    var(--aqua) 100%
+  );
+  color: #ffffff;
+  padding: 2rem 1.5rem;
+}
+
+.auth-brand-panel::before,
+.auth-brand-panel::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(48px);
+  pointer-events: none;
+}
+
+.auth-brand-panel::before {
+  width: 280px;
+  height: 280px;
+  top: -60px;
+  right: -40px;
+  background: var(--hero-a, rgba(255, 255, 255, 0.18));
+}
+
+.auth-brand-panel::after {
+  width: 220px;
+  height: 220px;
+  bottom: 10%;
+  left: -40px;
+  background: var(--hero-b, rgba(255, 255, 255, 0.12));
+}
+
+.auth-brand-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 28rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 100%;
+  justify-content: center;
+}
+
+.auth-brand-mascot {
+  width: 4.5rem;
+  height: 4.5rem;
+  object-fit: contain;
+}
+
+.auth-brand-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.auth-brand-narratives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  opacity: 0.95;
+}
+
+.auth-brand-narratives li::before {
+  content: '·';
+  margin-right: 0.5rem;
+}
+
+.auth-brand-footnote {
+  margin-top: auto;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.auth-form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  background: var(--bg-canvas);
+}
+
+.auth-form-card {
+  width: 100%;
+  max-width: 24rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-form-title {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--sea-ink);
+}
+
+.auth-google-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--sea-ink-muted);
+  font-size: 0.8125rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background: var(--bg-canvas-soft);
+  border: 1px solid var(--hairline);
+}
+
+.auth-tab {
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--sea-ink-muted);
+  cursor: pointer;
+}
+
+.auth-tab.active {
+  background: var(--surface-card);
+  color: var(--sea-ink);
+  box-shadow: 0 1px 2px rgba(15, 35, 45, 0.06);
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.auth-field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--sea-ink-muted);
+}
+
+.auth-field input {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 0.5rem;
+  background: var(--surface-card);
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--sea-ink);
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--aqua) 45%, var(--hairline));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--aqua) 12%, transparent);
+}
+
+.auth-error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--status-danger);
+}
+
+.auth-submit {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+}
+
+.sidebar-user-block {
+  border-top: 1px solid color-mix(in oklab, #ffffff 12%, transparent);
+  padding: 0.875rem 0.75rem 1rem;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.sidebar-user-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #ffffff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-user-email {
+  font-size: 0.6875rem;
+  color: color-mix(in oklab, #ffffff 65%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid color-mix(in oklab, #ffffff 18%, transparent);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: color-mix(in oklab, #ffffff 85%, transparent);
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.sidebar-logout:hover {
+  background: color-mix(in oklab, #ffffff 8%, transparent);
+}

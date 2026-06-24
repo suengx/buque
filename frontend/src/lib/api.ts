@@ -1,17 +1,39 @@
+import { clearAuthToken, getAuthToken } from '#/lib/auth-token'
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken()
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   })
+  if (res.status === 401) {
+    clearAuthToken()
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login'
+    }
+    throw new Error('未登录')
+  }
   if (!res.ok) {
-    throw new Error(`API ${res.status}: ${await res.text()}`)
+    let detail = await res.text()
+    try {
+      const parsed = JSON.parse(detail) as { detail?: string }
+      if (parsed.detail) detail = parsed.detail
+    } catch {
+      /* keep raw text */
+    }
+    throw new Error(detail || `API ${res.status}`)
   }
   return res.json() as Promise<T>
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return apiRequest<T>(path, init)
 }
 
 function snapshotQuery(snapshotId?: number) {

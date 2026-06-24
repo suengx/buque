@@ -1,8 +1,13 @@
 from functools import lru_cache
+import logging
+import secrets
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -35,6 +40,31 @@ class Settings(BaseSettings):
     erp_sync_timeout_ms: int = 240_000  # 库存导出，4min
     erp_orders_export_timeout_ms: int = 360_000  # 订单导出，6min
     erp_job_stale_buffer_seconds: int = 90  # TMS 抓取 + 落库
+
+    jwt_secret: str = ""
+    jwt_expire_minutes: int = 10080
+    google_client_id: str = ""
+    auth_required: bool = True
+    auth_password_enabled: bool | None = None
+
+    @field_validator("jwt_secret", mode="before")
+    @classmethod
+    def _default_jwt_secret(cls, value: object) -> str:
+        if value:
+            return str(value)
+        generated = secrets.token_urlsafe(32)
+        logger.warning("JWT_SECRET 未配置，已生成临时密钥（重启后 token 失效）")
+        return generated
+
+    @property
+    def password_auth_enabled(self) -> bool:
+        if self.auth_password_enabled is not None:
+            return self.auth_password_enabled
+        return not bool(self.google_client_id)
+
+    @property
+    def google_auth_enabled(self) -> bool:
+        return bool(self.google_client_id)
 
     @property
     def erp_job_stale_seconds(self) -> int:

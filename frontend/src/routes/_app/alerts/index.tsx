@@ -25,7 +25,7 @@ type AlertsSearch = {
   page?: number
 }
 
-export const Route = createFileRoute('/alerts/')({
+export const Route = createFileRoute('/_app/alerts/')({
   validateSearch: (search: Record<string, unknown>): AlertsSearch => ({
     level: (search.level as string) || undefined,
     risk_type: (search.risk_type as string) || undefined,
