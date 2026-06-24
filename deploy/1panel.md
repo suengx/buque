@@ -43,6 +43,18 @@ sudo bash quick_start.sh
 
 在 1Panel **防火墙** 中放行 80（或你选用的 HTTP 端口）。
 
+### 1.0 当前用户可用 Docker（避免事事 sudo）
+
+`/opt` 下部署可以，但**不要用 `sudo ./deploy/*.sh`**（会引发权限混乱）。将登录用户加入 docker 组：
+
+```bash
+sudo usermod -aG docker "$USER"
+# 退出 SSH 重新登录后验证：
+docker ps
+```
+
+若仍提示 permission denied，再执行 `sudo chown -R "$USER":"$USER" /opt/buque`。
+
 ### 1.1 Docker 镜像拉取（项目内已配置，一般无需手动）
 
 `docker-compose.ip.yml` 默认经 **腾讯云镜像** `mirror.ccs.tencentyun.com/library/` 拉取 `python` / `node` / `postgres` / `caddy`，**`git pull` 后直接部署即可**。
@@ -66,6 +78,23 @@ sudo mkdir -p /opt/buque && sudo chown "$USER":"$USER" /opt/buque
 cd /opt/buque
 git clone <仓库地址> .
 ```
+
+**勿用 `sudo git clone` / `sudo git pull`**，否则 `.git` 归 root 所有，后续 `ubuntu` 用户会报 `Permission denied`。
+
+若目录已是 root 所有，修复：
+
+```bash
+sudo chown -R "$USER":"$USER" /opt/buque
+```
+
+`git pull` 若报 `HTTP2 framing layer`，在当前用户下执行一次：
+
+```bash
+git config --global http.version HTTP/1.1
+git pull
+```
+
+仍失败可用本机 `rsync` 同步代码（见文末「git 拉取失败」）。
 
 ### 方式 B：本地上传 `.env`
 
@@ -177,11 +206,33 @@ docker compose -f docker-compose.ip.yml logs scheduler | tail -20
 
 ---
 
+## git 拉取失败：本机 rsync 同步
+
+ECS 访问 GitHub 不稳定时，在**本地 Mac**执行（排除 `.env`、`node_modules` 等）：
+
+```bash
+rsync -avz --delete \
+  --exclude '.git' --exclude '.env' --exclude 'node_modules' --exclude 'backend/.venv' \
+  --exclude 'backend/data' --exclude 'frontend/dist' \
+  /Users/s/Documents/projects/buque/ ubuntu@<ECS公网IP>:/opt/buque/
+```
+
+服务器上单独 `scp` 上传 `.env`。同步后：
+
+```bash
+cd /opt/buque && ./deploy/migrate-ip.sh && ./deploy/up-ip.sh
+```
+
+---
+
 ## 故障排查
 
 | 现象 | 处理 |
 |------|------|
 | build 拉镜像超时 | 先 `git pull` 用项目内镜像前缀；仍失败再 `sudo bash deploy/configure-docker-mirror.sh` |
+| `dubious ownership` / `.git` 权限 | `sudo chown -R $USER:$USER /opt/buque`，勿 `sudo git pull` |
+| `HTTP2 framing layer` | `git config --global http.version HTTP/1.1` 后重试 `git pull` |
+| git 仍拉不下来 | 本机 `rsync` 同步（见下） |
 | 无法访问 | 腾讯云安全组 + 1Panel 防火墙是否放行端口 |
 | 80 启动失败 | 端口被占，改 `HTTP_PORT=8080` 并同步改 `SITE_URL` |
 | 页面白屏 / API 404 | `SITE_URL` 与浏览器地址不一致 → 改 `.env` 后 **重新 build**：`./deploy/up-ip.sh` |

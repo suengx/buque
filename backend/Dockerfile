@@ -1,3 +1,5 @@
+FROM ghcr.io/astral-sh/uv:latest AS uv
+
 ARG DOCKER_REGISTRY_PREFIX=
 FROM ${DOCKER_REGISTRY_PREFIX}python:3.12-bookworm-slim
 
@@ -10,8 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
-COPY --from=${UV_IMAGE} /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 
 WORKDIR /app
 
