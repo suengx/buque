@@ -1,3 +1,4 @@
+# buque-backend-dockerfile-v3
 # ARG 须在首个 FROM 之前声明
 ARG DOCKER_REGISTRY_PREFIX=
 
@@ -37,14 +38,21 @@ COPY scripts ./scripts
 COPY contracts ./contracts
 COPY fixtures ./fixtures
 
-RUN set -eux; \
+# 拆分两层 + BuildKit 缓存：SSH 断开后重试不必重新下载全部 wheel
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    set -eux; \
     if [ -n "$UV_INDEX_URL" ]; then \
       echo ">>> uv sync --index-url $UV_INDEX_URL"; \
       uv sync --frozen --no-dev --index-url "$UV_INDEX_URL"; \
     else \
       echo ">>> uv sync (default PyPI, 国内 ECS 建议设 UV_INDEX_URL)"; \
       uv sync --frozen --no-dev; \
-    fi; \
+    fi
+
+RUN --mount=type=cache,target=/root/.cache/ms-playwright,sharing=locked \
+    set -eux; \
+    echo ">>> playwright install (PLAYWRIGHT_DOWNLOAD_BASE_URL=${PLAYWRIGHT_DOWNLOAD_BASE_URL:-default})"; \
     uv run playwright install chromium --with-deps
 
 ENV PATH="/app/.venv/bin:$PATH"

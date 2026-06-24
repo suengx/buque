@@ -249,8 +249,10 @@ cd /opt/buque && ./deploy/migrate-ip.sh && ./deploy/up-ip.sh
 
 | 现象 | 处理 |
 |------|------|
-| build 拉镜像超时 | 先 `git pull` 用项目内镜像前缀；仍失败再 `sudo bash deploy/configure-docker-mirror.sh` |
-| `dubious ownership` / `.git` 权限 | `sudo chown -R $USER:$USER /opt/buque`，勿 `sudo git pull` |
+| build 拉镜像超时 | 先 `git pull`；`tail -f logs/docker-build-*.log` 看是否仍在下载 |
+| SSH 断开构建中断 | `./deploy/build-ip-background.sh` 后台构建，完成后 `./deploy/migrate-ip.sh --skip-build` |
+| docker permission denied | `sudo usermod -aG docker $USER` 后**重新登录**，勿 sudo |
+| Dockerfile 第一行不是 `buque-backend-dockerfile-v3` | 服务器 `git pull` 未成功，代码过旧 |
 | `HTTP2 framing layer` | `git config --global http.version HTTP/1.1` 后重试 `git pull` |
 | git 仍拉不下来 | 本机 `rsync` 同步（见下） |
 | 无法访问 | 腾讯云安全组 + 1Panel 防火墙是否放行端口 |
