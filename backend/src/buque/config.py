@@ -1,9 +1,10 @@
 from functools import lru_cache
 import logging
 import secrets
+from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
-from pydantic import field_validator
+from pydantic import computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -16,7 +17,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "postgresql+psycopg://buque:buque@localhost:5432/buque"
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_user: str = "buque"
+    postgres_password: str = "buque"
+    postgres_db: str = "buque"
+
     timezone: str = "Asia/Shanghai"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
@@ -35,16 +41,24 @@ class Settings(BaseSettings):
 
     data_dir: str = "data"
     export_dir: str = "data/exports"
-    # 传输中心轮询上限（实测 job#13：库存 ~34s、订单 ~3min、全程 ~4min）
-    erp_sync_timeout_ms: int = 240_000  # 库存导出，4min
-    erp_orders_export_timeout_ms: int = 360_000  # 订单导出，6min
-    erp_job_stale_buffer_seconds: int = 90  # TMS 抓取 + 落库
+    erp_sync_timeout_ms: int = 240_000
+    erp_orders_export_timeout_ms: int = 360_000
+    erp_job_stale_buffer_seconds: int = 90
 
     jwt_secret: str = ""
     jwt_expire_minutes: int = 10080
     google_client_id: str = ""
     auth_required: bool = True
     auth_password_enabled: bool | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def database_url(self) -> str:
+        password = quote_plus(self.postgres_password)
+        return (
+            f"postgresql+psycopg://{self.postgres_user}:{password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
     @field_validator("jwt_secret", mode="before")
     @classmethod
@@ -71,7 +85,6 @@ class Settings(BaseSettings):
 
     @property
     def erp_job_stale_seconds(self) -> int:
-        """同步 job 最大存活时间：库存导出 + 订单导出 + 缓冲。"""
         return (
             self.erp_sync_timeout_ms // 1000
             + self.erp_orders_export_timeout_ms // 1000

@@ -8,7 +8,7 @@ x-backend-build: &backend-build
     <<: *docker-registry
 
 x-backend-env: &backend-env
-  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buque}:${POSTGRES_PASSWORD:-buque}@postgres:5432/${POSTGRES_DB:-buque}
+  POSTGRES_HOST: postgres
   CORS_ORIGINS: https://${DOMAIN:?set DOMAIN}
   API_RELOAD: "false"
 
