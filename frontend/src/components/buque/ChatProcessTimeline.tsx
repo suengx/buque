@@ -13,7 +13,6 @@ type ChatProcessTimelineProps = {
   isActive?: boolean
   elapsedMs?: number
   hasStreamingText?: boolean
-  onCancel?: () => void
 }
 
 export function ChatProcessTimeline({
@@ -22,7 +21,6 @@ export function ChatProcessTimeline({
   isActive = false,
   elapsedMs = 0,
   hasStreamingText = false,
-  onCancel,
 }: ChatProcessTimelineProps) {
   const [expanded, setExpanded] = useState(false)
   const stepsRef = useRef<HTMLOListElement>(null)
@@ -48,11 +46,6 @@ export function ChatProcessTimeline({
             <span className="chat-process-duration">{formatDurationMs(duration)}</span>
           ) : null}
         </div>
-        {onCancel ? (
-          <button type="button" className="chat-process-cancel-link" onClick={onCancel}>
-            取消
-          </button>
-        ) : null}
       </div>
     )
   }
@@ -67,11 +60,6 @@ export function ChatProcessTimeline({
             <span className="chat-process-duration">{formatDurationMs(duration)}</span>
           ) : null}
         </div>
-        {onCancel ? (
-          <button type="button" className="chat-process-cancel-link" onClick={onCancel}>
-            取消
-          </button>
-        ) : null}
       </div>
     )
   }

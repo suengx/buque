@@ -47,14 +47,17 @@ def create_session(
     return row
 
 
-def list_sessions(db: Session, user: User, *, limit: int = 50) -> list[ChatSession]:
-    return (
-        db.query(ChatSession)
-        .filter(ChatSession.user_id == user.id)
-        .order_by(ChatSession.updated_at.desc())
-        .limit(limit)
-        .all()
-    )
+def list_sessions(
+    db: Session,
+    user: User,
+    *,
+    snapshot_id: int | None = None,
+    limit: int = 50,
+) -> list[ChatSession]:
+    query = db.query(ChatSession).filter(ChatSession.user_id == user.id)
+    if snapshot_id is not None:
+        query = query.filter(ChatSession.snapshot_id == snapshot_id)
+    return query.order_by(ChatSession.updated_at.desc()).limit(limit).all()
 
 
 def list_messages(db: Session, session_id: int) -> list[ChatMessage]:

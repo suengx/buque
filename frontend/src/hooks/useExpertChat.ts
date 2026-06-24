@@ -103,17 +103,20 @@ export function useExpertChat(sessionId: number | undefined) {
     setStallSeconds(0)
   }, [])
 
-  const refresh = useCallback(async () => {
-    if (!sessionId) {
+  const refresh = useCallback(async (targetId?: number, background = false) => {
+    const sid = targetId ?? sessionId
+    if (!sid) {
       setSession(null)
       setMessages([])
       return
     }
     const seq = ++refreshSeqRef.current
-    setIsLoading(true)
+    if (!background) {
+      setIsLoading(true)
+    }
     setError(null)
     try {
-      const detail = await expertApi.getSession(sessionId)
+      const detail = await expertApi.getSession(sid)
       if (seq !== refreshSeqRef.current) return
       setSession(detail)
       setMessages(detail.messages)
@@ -121,7 +124,7 @@ export function useExpertChat(sessionId: number | undefined) {
       if (seq !== refreshSeqRef.current) return
       setError(err instanceof Error ? err.message : '加载会话失败')
     } finally {
-      if (seq === refreshSeqRef.current) {
+      if (seq === refreshSeqRef.current && !background) {
         setIsLoading(false)
       }
     }
@@ -245,7 +248,7 @@ export function useExpertChat(sessionId: number | undefined) {
           controller.signal,
         )
         if (generation !== sendGenerationRef.current) return
-        await refresh()
+        await refresh(targetSessionId, true)
       } catch (err) {
         if (generation !== sendGenerationRef.current) return
         if (controller.signal.aborted) {

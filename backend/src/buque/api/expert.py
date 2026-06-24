@@ -71,8 +71,9 @@ def create_session(
 def list_sessions(
     current_user: CurrentUser,
     db: Session = Depends(get_db),
+    snapshot_id: int | None = None,
 ) -> list[ChatSessionOut]:
-    rows = svc.list_sessions(db, current_user)
+    rows = svc.list_sessions(db, current_user, snapshot_id=snapshot_id)
     return [_session_out(r) for r in rows]
 
 

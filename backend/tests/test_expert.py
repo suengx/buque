@@ -128,6 +128,37 @@ def test_create_session_and_isolation(expert_client) -> None:
     session.close()
 
 
+def test_list_sessions_filters_by_snapshot(expert_client) -> None:
+    client, factory = expert_client
+    db = factory()
+    job2 = ErpSyncJob(
+        id=2,
+        monitor_date=date(2026, 6, 24),
+        job_kind=JobKind.PIPELINE,
+        status=IngestionStatus.SUCCESS,
+        phase=ErpSyncPhase.DONE,
+    )
+    db.add(job2)
+    user = db.query(User).filter(User.email == "expert@example.com").one()
+    db.add(ChatSession(user_id=user.id, snapshot_id=1, title="snap-1"))
+    db.add(ChatSession(user_id=user.id, snapshot_id=2, title="snap-2"))
+    db.commit()
+
+    all_rows = client.get("/api/v1/expert/sessions")
+    assert all_rows.status_code == 200
+    assert len(all_rows.json()) == 2
+
+    snap1 = client.get("/api/v1/expert/sessions", params={"snapshot_id": 1})
+    assert snap1.status_code == 200
+    titles = [row["title"] for row in snap1.json()]
+    assert titles == ["snap-1"]
+
+    snap2 = client.get("/api/v1/expert/sessions", params={"snapshot_id": 2})
+    assert snap2.status_code == 200
+    assert [row["title"] for row in snap2.json()] == ["snap-2"]
+    db.close()
+
+
 @patch("buque.api.expert.stream_agent_turn", new=_fake_stream)
 def test_send_message_sse(expert_client) -> None:
     client, _factory = expert_client

@@ -50,10 +50,9 @@ describe('ChatProcessTimeline', () => {
         steps={activeSteps}
         isActive
         elapsedMs={5000}
-        onCancel={() => {}}
       />,
     )
     expect(screen.getByText(/查询风险清单/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: '取消' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '取消' })).toBeNull()
   })
 })

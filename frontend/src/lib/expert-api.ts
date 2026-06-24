@@ -170,7 +170,8 @@ export const expertApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  listSessions: () => apiRequest<ChatSession[]>('/expert/sessions'),
+  listSessions: (snapshotId: number) =>
+    apiRequest<ChatSession[]>(`/expert/sessions?snapshot_id=${snapshotId}`),
   getSession: (sessionId: number) =>
     apiRequest<ChatSessionDetail>(`/expert/sessions/${sessionId}`),
   adoptExplanation: (sessionId: number, messageId: number) =>

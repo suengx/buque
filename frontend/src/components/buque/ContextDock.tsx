@@ -22,7 +22,12 @@ function snapshotLabel(snapshot: { monitor_date: string; finished_at: string | n
   return `${time} · 业务日 ${snapshot.monitor_date}`
 }
 
-export function SnapshotSelector({ embedded = false }: { embedded?: boolean }) {
+type SnapshotSelectorProps = {
+  embedded?: boolean
+  onSnapshotSelect?: (snapshotId: number) => void
+}
+
+export function SnapshotSelector({ embedded = false, onSnapshotSelect }: SnapshotSelectorProps) {
   const { snapshots, selectedSnapshotId, selectedSnapshot, setSelectedSnapshotId, isLoading } =
     useSnapshot()
   const [open, setOpen] = useState(false)
@@ -78,6 +83,7 @@ export function SnapshotSelector({ embedded = false }: { embedded?: boolean }) {
                 )}
                 onClick={() => {
                   setSelectedSnapshotId(s.id)
+                  onSnapshotSelect?.(s.id)
                   setOpen(false)
                 }}
               >
@@ -91,10 +97,21 @@ export function SnapshotSelector({ embedded = false }: { embedded?: boolean }) {
   )
 }
 
-export function ContextDock() {
+type ContextDockProps = {
+  placement?: 'fixed' | 'inline'
+  onSnapshotSelect?: (snapshotId: number) => void
+}
+
+export function ContextDock({ placement = 'fixed', onSnapshotSelect }: ContextDockProps) {
   return (
-    <div className="buque-context-dock" aria-label="数据快照与同步">
-      <SnapshotSelector embedded />
+    <div
+      className={cn(
+        'buque-context-dock',
+        placement === 'inline' && 'buque-context-dock-inline',
+      )}
+      aria-label="数据快照与同步"
+    >
+      <SnapshotSelector embedded onSnapshotSelect={onSnapshotSelect} />
       <div className="buque-context-dock-divider" aria-hidden />
       <DataOpsHub embedded />
     </div>

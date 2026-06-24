@@ -8,6 +8,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { AuthProvider } from '../context/AuthContext'
+import { SidebarLayoutProvider, useSidebarLayout } from '../context/SidebarLayoutContext'
 import { SnapshotProvider } from '../context/SnapshotContext'
 import AppSidebar from '../components/buque/AppSidebar'
 import { ContextDock } from '../components/buque/ContextDock'
@@ -54,6 +55,30 @@ function RootDocument() {
   )
 }
 
+function AppShellInner() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const { collapsed } = useSidebarLayout()
+  const isChat = pathname === '/chat' || pathname.startsWith('/chat/')
+
+  return (
+    <SnapshotProvider>
+      <AppSidebar />
+      <main
+        className="app-main"
+        data-sidebar-collapsed={collapsed ? 'true' : undefined}
+        data-chat-page={isChat ? 'true' : undefined}
+      >
+        {!isChat ? <ContextDock placement="fixed" /> : null}
+        <div className="app-main-inner">
+          <div className="page-content">
+            <Outlet />
+          </div>
+        </div>
+      </main>
+    </SnapshotProvider>
+  )
+}
+
 function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const isLogin = pathname === '/login' || pathname.startsWith('/login/')
@@ -63,16 +88,8 @@ function AppShell() {
   }
 
   return (
-    <SnapshotProvider>
-      <AppSidebar />
-      <main className="min-h-screen pl-60">
-        <ContextDock />
-        <div className="px-6 py-5">
-          <div className="page-content">
-            <Outlet />
-          </div>
-        </div>
-      </main>
-    </SnapshotProvider>
+    <SidebarLayoutProvider>
+      <AppShellInner />
+    </SidebarLayoutProvider>
   )
 }
