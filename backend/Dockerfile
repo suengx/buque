@@ -18,7 +18,7 @@ COPY --from=uv /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY alembic ./alembic
 COPY alembic.ini ./
