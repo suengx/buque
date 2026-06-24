@@ -1,4 +1,4 @@
-.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop
+.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup
 
 db-up:
 	docker compose up -d
@@ -42,3 +42,12 @@ dev: db-up
 
 test:
 	cd backend && uv run pytest -q
+
+prod-up:
+	./deploy/up.sh
+
+prod-migrate:
+	./deploy/migrate.sh
+
+prod-backup:
+	./deploy/backup-db.sh

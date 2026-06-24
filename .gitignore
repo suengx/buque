@@ -17,6 +17,7 @@ backend/data/*
 !backend/data/.gitkeep
 *.xlsx
 !docs/desensitized_raw_docs.xlsx
+!docs/delivery/*.xlsx
 
 # Frontend
 frontend/node_modules/

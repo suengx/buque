@@ -1,3 +1,5 @@
+import os
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,11 +36,12 @@ app = create_app()
 
 
 def run() -> None:
+    reload = os.environ.get("API_RELOAD", "").lower() in {"1", "true", "yes"}
     uvicorn.run(
         "buque.main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=True,
+        reload=reload,
     )
 
 

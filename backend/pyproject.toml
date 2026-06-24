@@ -35,6 +35,7 @@ dev = [
 [project.scripts]
 buque-api = "buque.main:run"
 buque-job = "buque.jobs.scheduler:run_daily_pipeline_cli"
+buque-scheduler = "buque.jobs.scheduler:start_scheduler"
 
 [build-system]
 requires = ["hatchling"]
