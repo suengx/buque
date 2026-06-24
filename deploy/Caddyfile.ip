@@ -1,0 +1,12 @@
+# 无域名 / 未备案：容器内 HTTP :80，宿主机端口由 compose ports 映射（默认 80，冲突可改 8080:80）
+:80 {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

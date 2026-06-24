@@ -1,5 +1,7 @@
 # 腾讯云 ECS 生产部署指引
 
+> **未备案 / 纯 IP + 1Panel**：见 [`1panel.md`](1panel.md)（`docker-compose.ip.yml` + `SITE_URL`）。
+
 ## 前置条件
 
 | 项 | 建议 |

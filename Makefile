@@ -1,4 +1,4 @@
-.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup
+.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup prod-up-ip prod-migrate-ip prod-backup-ip
 
 db-up:
 	docker compose up -d
@@ -51,3 +51,12 @@ prod-migrate:
 
 prod-backup:
 	./deploy/backup-db.sh
+
+prod-up-ip:
+	./deploy/up-ip.sh
+
+prod-migrate-ip:
+	./deploy/migrate-ip.sh
+
+prod-backup-ip:
+	./deploy/backup-db-ip.sh
