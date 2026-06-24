@@ -1,4 +1,5 @@
-FROM python:3.12-bookworm-slim
+ARG DOCKER_REGISTRY_PREFIX=
+FROM ${DOCKER_REGISTRY_PREFIX}python:3.12-bookworm-slim
 
 ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
@@ -9,7 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
+COPY --from=${UV_IMAGE} /uv /uvx /bin/
 
 WORKDIR /app
 

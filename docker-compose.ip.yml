@@ -1,5 +1,13 @@
 # 无备案域名、IP 访问：HTTP only，由 SITE_URL 驱动 CORS 与前端构建参数。
 # 与 1Panel 同机时若 80 被占用，将 caddy.ports 改为 "8080:80"，SITE_URL=http://<IP>:8080
+x-docker-registry: &docker-registry
+  DOCKER_REGISTRY_PREFIX: ${DOCKER_REGISTRY_PREFIX:-mirror.ccs.tencentyun.com/library/}
+
+x-backend-build: &backend-build
+  context: ./backend
+  args:
+    <<: *docker-registry
+
 x-backend-env: &backend-env
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-buque}:${POSTGRES_PASSWORD:-buque}@postgres:5432/${POSTGRES_DB:-buque}
   CORS_ORIGINS: ${SITE_URL:?set SITE_URL}
@@ -7,7 +15,7 @@ x-backend-env: &backend-env
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: ${DOCKER_REGISTRY_PREFIX:-mirror.ccs.tencentyun.com/library/}postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-buque}
@@ -24,7 +32,7 @@ services:
 
   migrate:
     build:
-      context: ./backend
+      <<: *backend-build
     env_file: .env
     environment:
       <<: *backend-env
@@ -36,7 +44,7 @@ services:
 
   api:
     build:
-      context: ./backend
+      <<: *backend-build
     restart: unless-stopped
     env_file: .env
     environment:
@@ -55,7 +63,7 @@ services:
 
   scheduler:
     build:
-      context: ./backend
+      <<: *backend-build
     restart: unless-stopped
     env_file: .env
     environment:
@@ -71,6 +79,7 @@ services:
     build:
       context: ./frontend
       args:
+        <<: *docker-registry
         VITE_API_BASE_URL: ${SITE_URL:?set SITE_URL}/api/v1
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
         VITE_AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
@@ -82,7 +91,7 @@ services:
         condition: service_healthy
 
   caddy:
-    image: caddy:2-alpine
+    image: ${DOCKER_REGISTRY_PREFIX:-mirror.ccs.tencentyun.com/library/}caddy:2-alpine
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"

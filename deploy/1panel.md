@@ -43,6 +43,16 @@ sudo bash quick_start.sh
 
 在 1Panel **防火墙** 中放行 80（或你选用的 HTTP 端口）。
 
+### 1.1 Docker 镜像拉取（项目内已配置，一般无需手动）
+
+`docker-compose.ip.yml` 默认经 **腾讯云镜像** `mirror.ccs.tencentyun.com/library/` 拉取 `python` / `node` / `postgres` / `caddy`，**`git pull` 后直接部署即可**。
+
+仅当仍超时时，再执行兜底脚本（改 Docker 守护进程全局配置）：
+
+```bash
+sudo bash deploy/configure-docker-mirror.sh
+```
+
 ---
 
 ## 阶段 2：准备代码与 `.env`
@@ -171,6 +181,7 @@ docker compose -f docker-compose.ip.yml logs scheduler | tail -20
 
 | 现象 | 处理 |
 |------|------|
+| build 拉镜像超时 | 先 `git pull` 用项目内镜像前缀；仍失败再 `sudo bash deploy/configure-docker-mirror.sh` |
 | 无法访问 | 腾讯云安全组 + 1Panel 防火墙是否放行端口 |
 | 80 启动失败 | 端口被占，改 `HTTP_PORT=8080` 并同步改 `SITE_URL` |
 | 页面白屏 / API 404 | `SITE_URL` 与浏览器地址不一致 → 改 `.env` 后 **重新 build**：`./deploy/up-ip.sh` |

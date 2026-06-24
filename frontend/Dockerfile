@@ -1,4 +1,6 @@
-FROM node:22-bookworm-slim AS build
+ARG DOCKER_REGISTRY_PREFIX=
+
+FROM ${DOCKER_REGISTRY_PREFIX}node:22-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -17,7 +19,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
 
 RUN npm run build
 
-FROM node:22-bookworm-slim
+FROM ${DOCKER_REGISTRY_PREFIX}node:22-bookworm-slim
 
 WORKDIR /app
 
