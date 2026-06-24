@@ -21,6 +21,7 @@ x-backend-env: &backend-env
   POSTGRES_HOST: postgres
   CORS_ORIGINS: ${SITE_URL:?set SITE_URL}
   API_RELOAD: "false"
+  TZ: ${TIMEZONE:-Asia/Shanghai}
 
 services:
   postgres:

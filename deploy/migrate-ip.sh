@@ -40,7 +40,7 @@ LOG_FILE="$LOG_DIR/migrate-$(date +%Y%m%d_%H%M%S).log"
 if [[ "$SKIP_BUILD" == false ]]; then
   echo "阶段 1/2: 构建镜像（日志同时写入 $LOG_FILE）"
   echo "提示: 可改用 ./deploy/build-ip-background.sh 后台构建，完成后本脚本加 --skip-build"
-  docker compose -f docker-compose.ip.yml build migrate 2>&1 | tee "$LOG_FILE"
+  docker compose -f docker-compose.ip.yml build --progress=plain migrate 2>&1 | tee "$LOG_FILE"
 else
   echo "跳过构建（--skip-build）"
 fi

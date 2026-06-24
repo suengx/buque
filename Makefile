@@ -63,7 +63,16 @@ prod-backup-ip:
 
 # 本地验证生产 Docker 栈（发布到 ECS 前试跑）
 docker-ip-build:
+	mkdir -p logs
 	./deploy/local-docker.sh build
+
+# 导出到腾讯云 ECS（x86）：须先构建 amd64 镜像
+docker-ip-build-ecs:
+	mkdir -p logs
+	DOCKER_DEFAULT_PLATFORM=linux/amd64 ./deploy/local-docker.sh build
+
+docker-ip-export-ecs: docker-ip-build-ecs
+	./deploy/export-images.sh /tmp/buque-images.tar.gz
 
 docker-ip-migrate:
 	./deploy/local-docker.sh migrate

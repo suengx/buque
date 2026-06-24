@@ -21,5 +21,14 @@ if [[ -z "${SITE_URL:-}" ]]; then
   exit 1
 fi
 
-docker compose -f "$COMPOSE_FILE" up -d --build
+SKIP_BUILD=false
+if [[ "${1:-}" == "--skip-build" ]]; then
+  SKIP_BUILD=true
+fi
+
+if [[ "$SKIP_BUILD" == true ]]; then
+  docker compose -f "$COMPOSE_FILE" up -d
+else
+  docker compose -f "$COMPOSE_FILE" up -d --build
+fi
 echo "部署完成。访问: ${SITE_URL}"

@@ -290,6 +290,10 @@ def download_fresh_transport_task(
             f"传输中心下载失败 (task_id={download_task_id}, "
             f"retries={download_failures}, error={last_download_error}, {base})"
         )
+    try:
+        page.screenshot(path=str(settings.export_dir / "transport_timeout.png"), full_page=True)
+    except Exception:
+        pass
     raise RuntimeError(f"传输中心未检测到新导出任务 ({base})")
 
 

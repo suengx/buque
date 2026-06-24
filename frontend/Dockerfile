@@ -51,7 +51,8 @@ RUN if [ -n "$NPM_REGISTRY" ]; then npm config set registry "$NPM_REGISTRY"; fi 
     && npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
+COPY docker/serve.mjs ./docker/serve.mjs
 
 EXPOSE 3000
 
-CMD ["node", "dist/server/server.js"]
+CMD ["node", "docker/serve.mjs"]

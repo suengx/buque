@@ -1,4 +1,4 @@
-# buque-backend-dockerfile-v3
+# buque-backend-dockerfile-v4
 # ARG 须在首个 FROM 之前声明
 ARG DOCKER_REGISTRY_PREFIX=
 
@@ -50,8 +50,8 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
       uv sync --frozen --no-dev; \
     fi
 
-RUN --mount=type=cache,target=/root/.cache/ms-playwright,sharing=locked \
-    set -eux; \
+# Playwright 浏览器必须写入镜像层；cache mount 不会进入最终镜像
+RUN set -eux; \
     echo ">>> playwright install (PLAYWRIGHT_DOWNLOAD_BASE_URL=${PLAYWRIGHT_DOWNLOAD_BASE_URL:-default})"; \
     uv run playwright install chromium --with-deps
 

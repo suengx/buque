@@ -31,7 +31,11 @@ class GerpgGoSession:
         if not settings.erp_base_url or not settings.erp_username:
             raise RuntimeError("ERP_BASE_URL / ERP_USERNAME 未配置")
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=self.headless)
+        launch_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+        self._browser = self._playwright.chromium.launch(
+            headless=self.headless,
+            args=launch_args,
+        )
         self._context = self._browser.new_context(accept_downloads=True, viewport={"width": 1920, "height": 1080})
         self._page = self._context.new_page()
         gerpgo_ui.login(self._page)
