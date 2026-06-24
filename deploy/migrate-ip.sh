@@ -9,5 +9,5 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-docker compose -f docker-compose.ip.yml run --rm migrate
+docker compose -f docker-compose.ip.yml run --rm --build migrate
 echo "数据库迁移与种子数据完成。"

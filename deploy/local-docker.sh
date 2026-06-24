@@ -18,7 +18,7 @@ case "$cmd" in
     $COMPOSE build
     ;;
   migrate)
-    $COMPOSE run --rm migrate
+    $COMPOSE run --rm --build migrate
     ;;
   up)
     $COMPOSE up -d --build
