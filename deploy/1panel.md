@@ -55,15 +55,17 @@ docker ps
 
 若仍提示 permission denied，再执行 `sudo chown -R "$USER":"$USER" /opt/buque`。
 
-### 1.1 Docker 镜像拉取（项目内已配置，一般无需手动）
+### 1.1 Docker 镜像拉取
 
-`docker-compose.ip.yml` 默认经 **腾讯云镜像** `mirror.ccs.tencentyun.com/library/` 拉取 `python` / `node` / `postgres` / `caddy`，**`git pull` 后直接部署即可**。
-
-仅当仍超时时，再执行兜底脚本（改 Docker 守护进程全局配置）：
+**腾讯云 ECS** 在 `.env` 中设置（本地 Mac 不要写）：
 
 ```bash
-sudo bash deploy/configure-docker-mirror.sh
+DOCKER_REGISTRY_PREFIX=mirror.ccs.tencentyun.com/library/
 ```
+
+未设置时直连 `docker.io`（适合本地）；ECS 上不设会拉取超时。
+
+仅当已设置仍超时时，再执行兜底：`sudo bash deploy/configure-docker-mirror.sh`
 
 ---
 

@@ -1,4 +1,4 @@
-.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup prod-up-ip prod-migrate-ip prod-backup-ip
+.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup prod-up-ip prod-migrate-ip prod-backup-ip docker-ip-build docker-ip-migrate docker-ip-up docker-ip-down
 
 db-up:
 	docker compose up -d
@@ -60,3 +60,16 @@ prod-migrate-ip:
 
 prod-backup-ip:
 	./deploy/backup-db-ip.sh
+
+# 本地验证生产 Docker 栈（发布到 ECS 前试跑）
+docker-ip-build:
+	./deploy/local-docker.sh build
+
+docker-ip-migrate:
+	./deploy/local-docker.sh migrate
+
+docker-ip-up:
+	./deploy/local-docker.sh up
+
+docker-ip-down:
+	./deploy/local-docker.sh down
