@@ -37,8 +37,15 @@ COPY scripts ./scripts
 COPY contracts ./contracts
 COPY fixtures ./fixtures
 
-RUN uv sync --frozen --no-dev \
-    && uv run playwright install chromium --with-deps
+RUN set -eux; \
+    if [ -n "$UV_INDEX_URL" ]; then \
+      echo ">>> uv sync --index-url $UV_INDEX_URL"; \
+      uv sync --frozen --no-dev --index-url "$UV_INDEX_URL"; \
+    else \
+      echo ">>> uv sync (default PyPI, 国内 ECS 建议设 UV_INDEX_URL)"; \
+      uv sync --frozen --no-dev; \
+    fi; \
+    uv run playwright install chromium --with-deps
 
 ENV PATH="/app/.venv/bin:$PATH"
 
