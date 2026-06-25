@@ -100,6 +100,8 @@ def test_rule_engine_handles_nan_ref_daily_sales(db_session: Session) -> None:
     findings = RuleEngine(db_session, date(2026, 6, 22), SNAPSHOT_ID)._evaluate_warehouse_scope()
     anomaly = [f for f in findings if f.trigger_rule == "MISSING_DATA_BLOCK"]
     assert len(anomaly) == 1
+    assert anomaly[0].risk_type == RiskType.DATA_ANOMALY
+    assert anomaly[0].risk_level == RiskLevel.GREEN
 
 
 def test_stockout_orange_factor_from_config(db_session: Session) -> None:

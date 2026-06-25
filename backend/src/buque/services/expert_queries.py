@@ -20,6 +20,11 @@ from buque.models.entities import (
     RiskType,
 )
 from buque.services.explanation_engine import ExplanationRuleEngine
+from buque.services.risk_aggregation import (
+    business_scope_q,
+    data_anomaly_count as count_data_anomalies,
+    sku_set_for_level,
+)
 from buque.services.snapshot_query import (
     get_snapshot,
     latest_snapshot_for_date,
@@ -112,19 +117,6 @@ def _format_snapshot_time(finished_at) -> str:
     return finished_at.astimezone(tz).strftime("%m/%d %H:%M")
 
 
-def _sku_set_for_level(db: Session, snapshot_id: int, level: RiskLevel) -> set[str]:
-    return {
-        r.sku
-        for r in db.query(FactMonitorResult)
-        .filter(
-            FactMonitorResult.snapshot_id == snapshot_id,
-            FactMonitorResult.risk_level == level,
-            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-        )
-        .all()
-    }
-
-
 def _count_new_skus(current: set[str], baseline: set[str]) -> int:
     return len([sku for sku in current if sku not in baseline])
 
@@ -137,8 +129,8 @@ def _build_trend_comparison(
     baseline_label: str | None,
     available: bool = True,
 ) -> dict[str, Any]:
-    current_red = _sku_set_for_level(db, current_sid, RiskLevel.RED)
-    current_orange = _sku_set_for_level(db, current_sid, RiskLevel.ORANGE)
+    current_red = sku_set_for_level(db, current_sid, RiskLevel.RED)
+    current_orange = sku_set_for_level(db, current_sid, RiskLevel.ORANGE)
     if baseline_job is None:
         return {
             "new_red_count": 0,
@@ -147,8 +139,8 @@ def _build_trend_comparison(
             "baseline_snapshot_id": None,
             "available": available,
         }
-    prev_red = _sku_set_for_level(db, baseline_job.id, RiskLevel.RED)
-    prev_orange = _sku_set_for_level(db, baseline_job.id, RiskLevel.ORANGE)
+    prev_red = sku_set_for_level(db, baseline_job.id, RiskLevel.RED)
+    prev_orange = sku_set_for_level(db, baseline_job.id, RiskLevel.ORANGE)
     return {
         "new_red_count": _count_new_skus(current_red, prev_red),
         "new_orange_count": _count_new_skus(current_orange, prev_orange),
@@ -164,10 +156,7 @@ def fetch_daily_summary(db: Session, snapshot_id: int) -> dict[str, Any]:
     prev = md - timedelta(days=1)
     sid = snapshot_id
 
-    base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.snapshot_id == sid,
-        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-    )
+    base_q = business_scope_q(db, sid)
     monitored = (
         db.query(func.count(func.distinct(FactMonitorResult.sku)))
         .filter(
@@ -226,7 +215,7 @@ def fetch_daily_summary(db: Session, snapshot_id: int) -> dict[str, Any]:
         "slow_moving_high_risk_count": slow_hr,
         "sales_anomaly_count": _count(RiskLevel.ORANGE, RiskType.SALES_ANOMALY)
         + _count(RiskLevel.YELLOW, RiskType.SALES_ANOMALY),
-        "data_anomaly_count": _count(RiskLevel.ORANGE, RiskType.DATA_ANOMALY),
+        "data_anomaly_count": count_data_anomalies(db, sid),
         "priority_today_count": base_q.filter(
             FactMonitorResult.risk_level == RiskLevel.RED,
             FactMonitorResult.requires_human_confirm.is_(True),
@@ -280,6 +269,8 @@ def fetch_alerts(
         q = q.filter(FactMonitorResult.risk_level == normalized_level)
     if normalized_risk_type:
         q = q.filter(FactMonitorResult.risk_type == normalized_risk_type)
+    else:
+        q = q.filter(FactMonitorResult.risk_type != RiskType.DATA_ANOMALY)
     if warehouse:
         q = q.filter(FactMonitorResult.warehouse == warehouse)
     if sku:

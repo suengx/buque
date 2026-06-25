@@ -60,6 +60,7 @@ export function FilterBar({ values, warehouses, onChange, onReset, onSubmit, emb
           <option value="STOCKOUT">断货风险</option>
           <option value="SLOW_MOVING">滞销风险</option>
           <option value="SALES_ANOMALY">销量异常</option>
+          <option value="DATA_ANOMALY">数据异常</option>
         </select>
       </FilterInline>
       <FilterInline label="仓库" className="min-w-[148px]">

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -31,6 +31,13 @@ from buque.schemas.api import (
     SkuDetailOut,
     TrendComparison,
     TrendPoint,
+)
+from buque.services.risk_aggregation import (
+    business_scope_q,
+    data_anomaly_count as count_data_anomalies,
+    level_counts,
+    sku_set_for_level,
+    warehouse_scope_q,
 )
 from buque.services.snapshot_query import (
     get_snapshot,
@@ -77,34 +84,6 @@ def _result_to_out(result: FactMonitorResult, sku: DimSku | None, explain: FactA
     )
 
 
-def _level_counts_for_snapshot(db: Session, snapshot_id: int) -> dict[str, int]:
-    base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.snapshot_id == snapshot_id,
-        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-    )
-    level_counts = {level.value: 0 for level in RiskLevel}
-    for level, count in (
-        base_q.with_entities(FactMonitorResult.risk_level, func.count())
-        .group_by(FactMonitorResult.risk_level)
-        .all()
-    ):
-        level_counts[level.value] = count
-    return level_counts
-
-
-def _sku_set_for_level(db: Session, snapshot_id: int, level: RiskLevel) -> set[str]:
-    return {
-        r.sku
-        for r in db.query(FactMonitorResult)
-        .filter(
-            FactMonitorResult.snapshot_id == snapshot_id,
-            FactMonitorResult.risk_level == level,
-            FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-        )
-        .all()
-    }
-
-
 def _count_new_skus(current: set[str], baseline: set[str]) -> int:
     return len([sku for sku in current if sku not in baseline])
 
@@ -117,8 +96,8 @@ def _build_trend_comparison(
     baseline_label: str | None,
     available: bool = True,
 ) -> TrendComparison:
-    current_red = _sku_set_for_level(db, current_sid, RiskLevel.RED)
-    current_orange = _sku_set_for_level(db, current_sid, RiskLevel.ORANGE)
+    current_red = sku_set_for_level(db, current_sid, RiskLevel.RED)
+    current_orange = sku_set_for_level(db, current_sid, RiskLevel.ORANGE)
     if baseline_job is None:
         return TrendComparison(
             new_red_count=0,
@@ -127,8 +106,8 @@ def _build_trend_comparison(
             baseline_snapshot_id=None,
             available=available,
         )
-    prev_red = _sku_set_for_level(db, baseline_job.id, RiskLevel.RED)
-    prev_orange = _sku_set_for_level(db, baseline_job.id, RiskLevel.ORANGE)
+    prev_red = sku_set_for_level(db, baseline_job.id, RiskLevel.RED)
+    prev_orange = sku_set_for_level(db, baseline_job.id, RiskLevel.ORANGE)
     return TrendComparison(
         new_red_count=_count_new_skus(current_red, prev_red),
         new_orange_count=_count_new_skus(current_orange, prev_orange),
@@ -160,10 +139,7 @@ def daily_report(
     md = job.monitor_date
     prev = md - timedelta(days=1)
 
-    base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.snapshot_id == sid,
-        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-    )
+    base_q = business_scope_q(db, sid)
     monitored = (
         db.query(func.count(func.distinct(FactMonitorResult.sku)))
         .filter(
@@ -226,7 +202,7 @@ def daily_report(
         slow_moving_high_risk_count=slow_hr,
         sales_anomaly_count=_count(RiskLevel.ORANGE, RiskType.SALES_ANOMALY)
         + _count(RiskLevel.YELLOW, RiskType.SALES_ANOMALY),
-        data_anomaly_count=_count(RiskLevel.ORANGE, RiskType.DATA_ANOMALY),
+        data_anomaly_count=count_data_anomalies(db, sid),
         priority_today_count=base_q.filter(
             FactMonitorResult.risk_level == RiskLevel.RED,
             FactMonitorResult.requires_human_confirm.is_(True),
@@ -243,12 +219,9 @@ def report_analytics(
     job = get_snapshot(db, sid)
     md = job.monitor_date
 
-    base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.snapshot_id == sid,
-        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-    )
+    base_q = business_scope_q(db, sid)
 
-    level_counts = _level_counts_for_snapshot(db, sid)
+    level_counts_result = level_counts(db, sid)
 
     type_counts: dict[str, int] = {}
     for rtype, count in (
@@ -264,7 +237,7 @@ def report_analytics(
         day_snapshot = latest_snapshot_for_date(db, d)
         counts = {level.value: 0 for level in RiskLevel}
         if day_snapshot:
-            counts = _level_counts_for_snapshot(db, day_snapshot.id)
+            counts = level_counts(db, day_snapshot.id)
         trend_7d.append(
             TrendPoint(
                 date=d,
@@ -296,7 +269,7 @@ def report_analytics(
     return ReportAnalyticsOut(
         snapshot_id=sid,
         monitor_date=md,
-        level_counts=level_counts,
+        level_counts=level_counts_result,
         type_counts=type_counts,
         trend_7d=trend_7d,
         top_priority=top_priority,
@@ -310,16 +283,13 @@ def alerts_meta(
 ) -> AlertsMetaOut:
     sid = resolve_snapshot_id(db, snapshot_id)
     job = get_snapshot(db, sid)
-    base_q = db.query(FactMonitorResult).filter(
-        FactMonitorResult.snapshot_id == sid,
-        FactMonitorResult.scope == MonitoringScope.WAREHOUSE,
-    )
+    scope_q = warehouse_scope_q(db, sid)
     warehouses = sorted(
-        w for (w,) in base_q.with_entities(FactMonitorResult.warehouse).distinct().all() if w
+        w for (w,) in scope_q.with_entities(FactMonitorResult.warehouse).distinct().all() if w
     )
     type_counts: dict[str, int] = {}
     for rtype, count in (
-        base_q.with_entities(FactMonitorResult.risk_type, func.count())
+        scope_q.with_entities(FactMonitorResult.risk_type, func.count())
         .group_by(FactMonitorResult.risk_type)
         .all()
     ):
@@ -356,6 +326,8 @@ def list_alerts(
         q = q.filter(FactMonitorResult.risk_level == RiskLevel(level))
     if risk_type:
         q = q.filter(FactMonitorResult.risk_type == RiskType(risk_type))
+    else:
+        q = q.filter(FactMonitorResult.risk_type != RiskType.DATA_ANOMALY)
     if warehouse:
         q = q.filter(FactMonitorResult.warehouse == warehouse)
     if sku:

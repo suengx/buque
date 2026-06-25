@@ -5,6 +5,7 @@ import {
   Boxes,
   CircleAlert,
   CircleCheck,
+  Database,
   OctagonAlert,
   PackageX,
   TriangleAlert,
@@ -96,7 +97,7 @@ function DailyReportPage() {
           <MetricCard
             title="全部预警"
             value={totalAlerts}
-            description="红 + 橙 + 黄预警行合计，有业务含义的监控结果"
+            description="红 + 橙 + 黄业务预警行合计（不含数据异常）"
             icon={BellRing}
             accent="neutral"
             onClick={() => goAlerts({})}
@@ -151,7 +152,7 @@ function DailyReportPage() {
         label="专项风险"
         description={metricLabels?.section_descriptions.special_risks ?? '红橙档专项 SKU'}
       >
-        <div className="buque-metric-grid buque-metric-grid-2">
+        <div className="buque-metric-grid buque-metric-grid-4">
           <MetricCard
             title="断货高风险"
             value={daily.stockout_high_risk_count}
@@ -167,6 +168,14 @@ function DailyReportPage() {
             icon={TrendingDown}
             accent="orange"
             onClick={() => goAlerts({ risk_type: 'SLOW_MOVING' })}
+          />
+          <MetricCard
+            title="数据异常"
+            value={daily.data_anomaly_count}
+            description="关键字段缺失，须先修复数据再判级"
+            icon={Database}
+            accent="neutral"
+            onClick={() => goAlerts({ risk_type: 'DATA_ANOMALY' })}
           />
         </div>
       </SectionBlock>

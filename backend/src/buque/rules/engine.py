@@ -155,7 +155,7 @@ class RuleEngine:
                         channel=None,
                         scope=MonitoringScope.WAREHOUSE,
                         risk_type=RiskType.DATA_ANOMALY,
-                        risk_level=RiskLevel.ORANGE,
+                        risk_level=RiskLevel.GREEN,
                         trigger_rule="MISSING_DATA_BLOCK",
                         trigger_metrics={
                             "field": "BASE_SALES_PRIORITY",
@@ -181,7 +181,7 @@ class RuleEngine:
                         channel=None,
                         scope=MonitoringScope.WAREHOUSE,
                         risk_type=RiskType.DATA_ANOMALY,
-                        risk_level=RiskLevel.ORANGE,
+                        risk_level=RiskLevel.GREEN,
                         trigger_rule="MISSING_DATA_BLOCK",
                         trigger_metrics={"field": "ref_daily_sales"},
                         dos=None,
