@@ -1,4 +1,4 @@
-.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup prod-up-ip prod-migrate-ip prod-backup-ip docker-ip-build docker-ip-migrate docker-ip-up docker-ip-down
+.PHONY: db-up db-down backend-install frontend-install init-db api pipeline pipeline-erp frontend test dev stop prod-up prod-migrate prod-backup prod-up-ip prod-migrate-ip prod-backup-ip prod-release-ip docker-ip-build docker-ip-migrate docker-ip-up docker-ip-down
 
 db-up:
 	docker compose up -d
@@ -61,12 +61,18 @@ prod-migrate-ip:
 prod-backup-ip:
 	./deploy/backup-db-ip.sh
 
-# 本地验证生产 Docker 栈（发布到 ECS 前试跑）
+# ECS 标准发布（在服务器执行 ./deploy/release-ip.sh）
+# - 未设 BUQUE_IMAGE_REGISTRY：ECS 后台构建（零月费，默认）
+# - 已设 BUQUE_IMAGE_REGISTRY=ghcr.io/...：从 GHCR 拉镜像（零月费）
+prod-release-ip:
+	@echo "请在 ECS 上执行: cd /opt/buque && ./deploy/release-ip.sh"
+
+# 本地验证生产 Docker 栈（紧急兜底构建，非主发布路径）
 docker-ip-build:
 	mkdir -p logs
 	./deploy/local-docker.sh build
 
-# 导出到腾讯云 ECS（x86）：须先构建 amd64 镜像
+# 【紧急兜底】导出到腾讯云 ECS（x86）：须先构建 amd64 镜像
 docker-ip-build-ecs:
 	mkdir -p logs
 	DOCKER_DEFAULT_PLATFORM=linux/amd64 ./deploy/local-docker.sh build

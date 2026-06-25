@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Mac 本地构建完成后导出镜像，供 scp 到 ECS（计划路径 B）
+# 【紧急兜底】Mac 本地构建完成后导出镜像，供 scp 到 ECS。
+# 主路径请用：./deploy/release-ip.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 OUT="${1:-/tmp/buque-images.tar.gz}"
-IMAGES=(buque-migrate buque-api buque-scheduler buque-web)
+REGISTRY="${BUQUE_IMAGE_REGISTRY:-buque}"
+TAG="${BUQUE_IMAGE_TAG:-local}"
+IMAGES=(
+  "${REGISTRY}/buque-backend:${TAG}"
+  "${REGISTRY}/buque-web:${TAG}"
+)
 
 echo "检查镜像是否存在..."
 missing=()
@@ -19,14 +25,14 @@ done
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "缺少镜像: ${missing[*]}"
   echo "请先执行（ECS 为 x86，必须 amd64）:"
-  echo "  DOCKER_DEFAULT_PLATFORM=linux/amd64 make docker-ip-build"
+  echo "  DOCKER_DEFAULT_PLATFORM=linux/amd64 make docker-ip-build-ecs"
   exit 1
 fi
 
-arch="$(docker image inspect buque-api:latest --format '{{.Architecture}}')"
+arch="$(docker image inspect "${REGISTRY}/buque-backend:${TAG}" --format '{{.Architecture}}')"
 if [[ "$arch" != "amd64" ]]; then
-  echo "错误: buque-api 架构为 $arch，ECS 需要 amd64"
-  echo "请重新构建: DOCKER_DEFAULT_PLATFORM=linux/amd64 make docker-ip-build"
+  echo "错误: buque-backend 架构为 $arch，ECS 需要 amd64"
+  echo "请重新构建: DOCKER_DEFAULT_PLATFORM=linux/amd64 make docker-ip-build-ecs"
   exit 1
 fi
 

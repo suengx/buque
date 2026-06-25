@@ -7,6 +7,8 @@ cd "$ROOT"
 COMPOSE="docker compose -f docker-compose.ip.yml"
 
 # 本地：强制直连 docker.io（覆盖 .env 里为 ECS 配置的镜像/构建加速项）
+export BUQUE_IMAGE_REGISTRY="${BUQUE_IMAGE_REGISTRY:-buque}"
+export BUQUE_IMAGE_TAG="${BUQUE_IMAGE_TAG:-local}"
 export DOCKER_REGISTRY_PREFIX=
 export DEBIAN_APT_MIRROR=
 export UV_INDEX_URL=

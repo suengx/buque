@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 数据库迁移。日常发布请用 ./deploy/release-ip.sh（含 pull + migrate + up）。
+# 本脚本仅在 release-ip.sh 或紧急兜底流程中调用。
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
@@ -39,7 +42,7 @@ LOG_FILE="$LOG_DIR/migrate-$(date +%Y%m%d_%H%M%S).log"
 
 if [[ "$SKIP_BUILD" == false ]]; then
   echo "阶段 1/2: 构建镜像（日志同时写入 $LOG_FILE）"
-  echo "提示: 可改用 ./deploy/build-ip-background.sh 后台构建，完成后本脚本加 --skip-build"
+  echo "提示: 主路径请用 GitHub Actions + ./deploy/release-ip.sh；紧急构建可用 ./deploy/build-ip-background.sh"
   docker compose -f docker-compose.ip.yml build --progress=plain migrate 2>&1 | tee "$LOG_FILE"
 else
   echo "跳过构建（--skip-build）"

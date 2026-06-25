@@ -17,6 +17,25 @@ x-backend-build: &backend-build
   args:
     <<: *backend-build-args
 
+x-frontend-build: &frontend-build
+  context: ./frontend
+  args:
+    <<: *frontend-build-args
+    VITE_API_BASE_URL: ${SITE_URL:?set SITE_URL}/api/v1
+    VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    VITE_AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
+
+# 仓库作用域 + 排除 DATA_ANOMALY
+x-backend-image: &backend-image
+  image: ${BUQUE_IMAGE_REGISTRY:-buque}/buque-backend:${BUQUE_IMAGE_TAG:-local}
+  build:
+    <<: *backend-build
+
+x-web-image: &web-image
+  image: ${BUQUE_IMAGE_REGISTRY:-buque}/buque-web:${BUQUE_IMAGE_TAG:-local}
+  build:
+    <<: *frontend-build
+
 x-backend-env: &backend-env
   POSTGRES_HOST: postgres
   CORS_ORIGINS: ${SITE_URL:?set SITE_URL}
@@ -41,8 +60,7 @@ services:
       retries: 10
 
   migrate:
-    build:
-      <<: *backend-build
+    <<: *backend-image
     env_file: .env
     environment:
       <<: *backend-env
@@ -53,8 +71,7 @@ services:
     restart: "no"
 
   api:
-    build:
-      <<: *backend-build
+    <<: *backend-image
     restart: unless-stopped
     env_file: .env
     environment:
@@ -72,8 +89,7 @@ services:
       start_period: 40s
 
   scheduler:
-    build:
-      <<: *backend-build
+    <<: *backend-image
     restart: unless-stopped
     env_file: .env
     environment:
@@ -86,13 +102,7 @@ services:
         condition: service_healthy
 
   web:
-    build:
-      context: ./frontend
-      args:
-        <<: *frontend-build-args
-        VITE_API_BASE_URL: ${SITE_URL:?set SITE_URL}/api/v1
-        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-        VITE_AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
+    <<: *web-image
     restart: unless-stopped
     environment:
       PORT: "3000"

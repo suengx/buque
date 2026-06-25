@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ECS 加载 Mac 导出的镜像（计划路径 B）
+# 【紧急兜底】ECS 加载 Mac 导出的镜像。主路径请用 ./deploy/release-ip.sh（TCR pull）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,6 +14,6 @@ fi
 echo "加载镜像: $ARCHIVE"
 gunzip -c "$ARCHIVE" | docker load
 echo
-echo "镜像已加载。继续部署:"
+echo "镜像已加载。继续部署（.env 须设 BUQUE_IMAGE_REGISTRY=buque BUQUE_IMAGE_TAG=local 或对应 tag）:"
 echo "  ./deploy/migrate-ip.sh --skip-build"
 echo "  ./deploy/up-ip.sh --skip-build"

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# 长时间 Docker 构建：后台运行，SSH 断开不影响。用法: ./deploy/build-ip-background.sh [all|migrate]
+# 【紧急兜底】ECS 长时间 Docker 构建（SSH 断开不影响）。
+# 主路径请用：./deploy/release-ip.sh（零月费：ECS 构建或 GHCR pull）
+# 用法: ./deploy/build-ip-background.sh [all|migrate]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
